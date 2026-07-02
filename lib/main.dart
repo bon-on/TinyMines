@@ -14,9 +14,9 @@ class TinyMinesApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF111317),
+        scaffoldBackgroundColor: const Color(0xFF101214),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF22C55E),
+          seedColor: const Color(0xFF8AA39B),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
@@ -34,15 +34,16 @@ class TinyMinesScreen extends StatefulWidget {
 }
 
 class _TinyMinesScreenState extends State<TinyMinesScreen> {
-  static const int size = 9;
-  static const int mineCount = 10;
   final math.Random _random = math.Random();
+  _Difficulty _difficulty = _Difficulty.easy;
   late List<_MineCell> _cells;
   bool _armed = false;
   bool _lost = false;
   bool _won = false;
   int _moves = 0;
 
+  int get _size => _difficulty.size;
+  int get _mineCount => _difficulty.mines;
   int get _flags => _cells.where((cell) => cell.flagged).length;
 
   @override
@@ -52,7 +53,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _restart() {
-    _cells = List.generate(size * size, (_) => _MineCell());
+    _cells = List.generate(_size * _size, (_) => _MineCell());
     _armed = false;
     _lost = false;
     _won = false;
@@ -60,17 +61,17 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     setState(() {});
   }
 
-  int _index(int row, int col) => row * size + col;
+  int _index(int row, int col) => row * _size + col;
 
   Iterable<int> _neighbors(int index) sync* {
-    final row = index ~/ size;
-    final col = index % size;
+    final row = index ~/ _size;
+    final col = index % _size;
     for (var dr = -1; dr <= 1; dr++) {
       for (var dc = -1; dc <= 1; dc++) {
         if (dr == 0 && dc == 0) continue;
         final nr = row + dr;
         final nc = col + dc;
-        if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+        if (nr >= 0 && nr < _size && nc >= 0 && nc < _size) {
           yield _index(nr, nc);
         }
       }
@@ -84,7 +85,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         if (!blocked.contains(i)) i,
     ]..shuffle(_random);
 
-    for (final index in candidates.take(mineCount)) {
+    for (final index in candidates.take(_mineCount)) {
       _cells[index].mine = true;
     }
     for (var i = 0; i < _cells.length; i++) {
@@ -137,6 +138,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     setState(() {});
   }
 
+  void _selectDifficulty(_Difficulty difficulty) {
+    if (_difficulty == difficulty) return;
+    _difficulty = difficulty;
+    _restart();
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _lost
@@ -153,8 +160,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               _Header(
                 flags: _flags,
                 moves: _moves,
-                mines: mineCount,
+                mines: _mineCount,
                 onRestart: _restart,
+              ),
+              const SizedBox(height: 10),
+              _DifficultyPicker(
+                difficulty: _difficulty,
+                onChanged: _selectDifficulty,
               ),
               const SizedBox(height: 12),
               Expanded(
@@ -171,10 +183,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _cells.length,
                           gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: size,
-                                crossAxisSpacing: 4,
-                                mainAxisSpacing: 4,
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: _size,
+                                crossAxisSpacing: _difficulty.gap,
+                                mainAxisSpacing: _difficulty.gap,
                               ),
                           itemBuilder: (context, index) {
                             return _MineTile(
@@ -219,6 +231,52 @@ class _MineCell {
   bool revealed = false;
   bool flagged = false;
   int nearby = 0;
+}
+
+enum _Difficulty {
+  easy('Easy', 8, 8),
+  normal('Normal', 9, 10),
+  hard('Hard', 12, 24);
+
+  const _Difficulty(this.label, this.size, this.mines);
+
+  final String label;
+  final int size;
+  final int mines;
+
+  double get gap => size > 10 ? 3 : 4;
+}
+
+class _DifficultyPicker extends StatelessWidget {
+  const _DifficultyPicker({required this.difficulty, required this.onChanged});
+
+  final _Difficulty difficulty;
+  final ValueChanged<_Difficulty> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_Difficulty>(
+      segments: [
+        for (final option in _Difficulty.values)
+          ButtonSegment<_Difficulty>(
+            value: option,
+            label: Text('${option.label} ${option.size}x${option.size}'),
+          ),
+      ],
+      selected: {difficulty},
+      onSelectionChanged: (selected) => onChanged(selected.first),
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF34413D);
+          }
+          return const Color(0xFF181C1F);
+        }),
+        foregroundColor: WidgetStateProperty.all(const Color(0xFFE4ECE8)),
+      ),
+    );
+  }
 }
 
 class _Header extends StatelessWidget {
@@ -272,7 +330,7 @@ class _Metric extends StatelessWidget {
       height: 42,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFF1C2229),
+        color: const Color(0xFF1B2023),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -310,7 +368,7 @@ class _MineTile extends StatelessWidget {
         ? Icons.flag
         : null;
     return Material(
-      color: cell.revealed ? const Color(0xFF25303A) : const Color(0xFF22C55E),
+      color: cell.revealed ? const Color(0xFF252B2E) : const Color(0xFF65756F),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
@@ -318,7 +376,19 @@ class _MineTile extends StatelessWidget {
         onLongPress: onLongPress,
         child: Center(
           child: content != null
-              ? Icon(content, color: const Color(0xFF08110C), size: 20)
+              ? Container(
+                  width: 26,
+                  height: 26,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE5484D),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    content,
+                    color: const Color(0xFFFFFFFF),
+                    size: 17,
+                  ),
+                )
               : Text(
                   cell.revealed && cell.nearby > 0 ? '${cell.nearby}' : '',
                   style: TextStyle(
