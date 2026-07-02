@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -41,6 +42,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   bool _lost = false;
   bool _won = false;
   int _moves = 0;
+  int _elapsedSeconds = 0;
+  int _hints = 3;
+  Timer? _timer;
 
   int get _size => _difficulty.size;
   int get _mineCount => _difficulty.mines;
@@ -52,12 +56,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _restart();
   }
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   void _restart() {
+    _timer?.cancel();
     _cells = List.generate(_size * _size, (_) => _MineCell());
     _armed = false;
     _lost = false;
     _won = false;
     _moves = 0;
+    _elapsedSeconds = 0;
+    _hints = _difficulty.hints;
     setState(() {});
   }
 
@@ -92,18 +105,35 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _cells[i].nearby = _neighbors(i).where((n) => _cells[n].mine).length;
     }
     _armed = true;
+    _startTimer();
   }
 
-  void _reveal(int index) {
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _lost || _won) return;
+      setState(() {
+        _elapsedSeconds++;
+      });
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _reveal(int index, {bool fromHint = false}) {
     if (_lost || _won) return;
     if (!_armed) _plantMines(index);
     final cell = _cells[index];
     if (cell.flagged || cell.revealed) return;
-    _moves++;
+    if (!fromHint) _moves++;
 
     if (cell.mine) {
       cell.revealed = true;
       _lost = true;
+      _stopTimer();
       for (final mineCell in _cells.where((c) => c.mine)) {
         mineCell.revealed = true;
       }
@@ -127,6 +157,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       }
     }
     _won = _cells.where((c) => !c.mine).every((c) => c.revealed);
+    if (_won) _stopTimer();
     setState(() {});
   }
 
@@ -144,12 +175,24 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _restart();
   }
 
+  void _useHint() {
+    if (!_armed || _lost || _won || _hints == 0) return;
+    final candidates = [
+      for (var i = 0; i < _cells.length; i++)
+        if (!_cells[i].mine && !_cells[i].revealed && !_cells[i].flagged) i,
+    ];
+    if (candidates.isEmpty) return;
+    candidates.sort((a, b) => _cells[a].nearby.compareTo(_cells[b].nearby));
+    _hints--;
+    _reveal(candidates.first, fromHint: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _lost
         ? 'Mine hit. Try a cleaner sweep.'
         : _won
-        ? 'Field cleared.'
+        ? 'Field cleared in ${_formatTime(_elapsedSeconds)}.'
         : 'Tap to reveal. Long press to flag.';
     return Scaffold(
       body: SafeArea(
@@ -159,9 +202,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             children: [
               _Header(
                 flags: _flags,
+                hints: _hints,
+                seconds: _elapsedSeconds,
                 moves: _moves,
                 mines: _mineCount,
                 onRestart: _restart,
+                onHint: _armed && !_lost && !_won && _hints > 0
+                    ? _useHint
+                    : null,
               ),
               const SizedBox(height: 10),
               _DifficultyPicker(
@@ -234,15 +282,16 @@ class _MineCell {
 }
 
 enum _Difficulty {
-  easy('Easy', 8, 8),
-  normal('Normal', 9, 10),
-  hard('Hard', 12, 24);
+  easy('Easy', 6, 5, 3),
+  normal('Normal', 9, 12, 3),
+  hard('Hard', 12, 28, 4);
 
-  const _Difficulty(this.label, this.size, this.mines);
+  const _Difficulty(this.label, this.size, this.mines, this.hints);
 
   final String label;
   final int size;
   final int mines;
+  final int hints;
 
   double get gap => size > 10 ? 3 : 4;
 }
@@ -282,39 +331,79 @@ class _DifficultyPicker extends StatelessWidget {
 class _Header extends StatelessWidget {
   const _Header({
     required this.flags,
+    required this.hints,
+    required this.seconds,
     required this.moves,
     required this.mines,
     required this.onRestart,
+    required this.onHint,
   });
 
   final int flags;
+  final int hints;
+  final int seconds;
   final int moves;
   final int mines;
   final VoidCallback onRestart;
+  final VoidCallback? onHint;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        const Expanded(
-          child: Text(
-            'Tiny Mines',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-          ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Tiny Mines',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
+            ),
+            IconButton(
+              onPressed: onHint,
+              tooltip: 'Reveal one safe tile',
+              icon: Badge(
+                label: Text('$hints'),
+                isLabelVisible: hints > 0,
+                child: const Icon(Icons.lightbulb),
+              ),
+            ),
+            IconButton(
+              onPressed: onRestart,
+              tooltip: 'Restart',
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
-        _Metric(label: 'Mines', value: '$mines'),
-        const SizedBox(width: 6),
-        _Metric(label: 'Flags', value: '$flags'),
-        const SizedBox(width: 6),
-        _Metric(label: 'Moves', value: '$moves'),
-        IconButton(
-          onPressed: onRestart,
-          tooltip: 'Restart',
-          icon: const Icon(Icons.refresh),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: _Metric(label: 'Mines', value: '$mines'),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _Metric(label: 'Flags', value: '$flags'),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _Metric(label: 'Time', value: _formatTime(seconds)),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _Metric(label: 'Moves', value: '$moves'),
+            ),
+          ],
         ),
       ],
     );
   }
+}
+
+String _formatTime(int seconds) {
+  final minutes = seconds ~/ 60;
+  final remaining = seconds % 60;
+  return '$minutes:${remaining.toString().padLeft(2, '0')}';
 }
 
 class _Metric extends StatelessWidget {
@@ -326,7 +415,6 @@ class _Metric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 62,
       height: 42,
       alignment: Alignment.center,
       decoration: BoxDecoration(
