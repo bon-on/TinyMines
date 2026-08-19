@@ -210,6 +210,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         ? 'Field cleared in ${_formatTime(_elapsedSeconds)}.'
         : 'Tap to reveal. Long press to flag.';
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
