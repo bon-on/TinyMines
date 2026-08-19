@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'result_registration.dart';
 
 void main() => runApp(const TinyMinesApp());
 
@@ -156,9 +157,23 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         }
       }
     }
+    final wasWon = _won;
     _won = _cells.where((c) => !c.mine).every((c) => c.revealed);
     if (_won) _stopTimer();
     setState(() {});
+    if (_won && !wasWon) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          offerResultRegistration(
+            context,
+            gameId: 'tiny-mines',
+            metric: 'time',
+            value: _elapsedSeconds,
+            displayValue: _formatTime(_elapsedSeconds),
+          );
+        }
+      });
+    }
   }
 
   void _toggleFlag(int index) {
