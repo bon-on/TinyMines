@@ -1,12 +1,19 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'best_times.dart';
 import 'mine_field.dart';
 import 'result_registration.dart';
 
-void main() => runApp(const TinyMinesApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Right-click flags tiles, so suppress the browser context menu.
+  if (kIsWeb) await BrowserContextMenu.disableContextMenu();
+  runApp(const TinyMinesApp());
+}
 
 class TinyMinesApp extends StatelessWidget {
   const TinyMinesApp({super.key});
@@ -170,6 +177,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final wrongFlags = _field.wrongFlags.toSet();
     final status = _lost
         ? 'Mine hit. Try a cleaner sweep.'
         : _won
@@ -225,7 +233,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                               itemBuilder: (context, index) {
                                 return _MineTile(
                                   cell: _field.cells[index],
-                                  lost: _lost,
+                                  gameOver: _lost || _won,
+                                  wrongFlag: wrongFlags.contains(index),
                                   onTap: () => _tapCell(index),
                                   onFlag: () => _toggleFlag(index),
                                 );
@@ -429,19 +438,20 @@ class _Metric extends StatelessWidget {
 class _MineTile extends StatelessWidget {
   const _MineTile({
     required this.cell,
-    required this.lost,
+    required this.gameOver,
+    required this.wrongFlag,
     required this.onTap,
     required this.onFlag,
   });
 
   final MineCell cell;
-  final bool lost;
+  final bool gameOver;
+  final bool wrongFlag;
   final VoidCallback onTap;
   final VoidCallback onFlag;
 
   @override
   Widget build(BuildContext context) {
-    final wrongFlag = lost && cell.flagged && !cell.mine;
     final content = cell.revealed
         ? cell.mine
               ? Icons.close
@@ -459,7 +469,7 @@ class _MineTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
-        mouseCursor: interactive && !lost
+        mouseCursor: interactive && !gameOver
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
         hoverColor: const Color(0x33FFFFFF),

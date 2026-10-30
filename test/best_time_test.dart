@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +9,7 @@ import 'package:tiny_mines/mine_field.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  registerHintedWin();
 
   test('BestTimes keeps only the fastest time per difficulty', () async {
     const store = BestTimes();
@@ -62,4 +65,37 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+}
+
+void registerHintedWin() {
+  testWidgets('a hinted win stores the best time including the penalty', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // Learn the mine layout the screen will get from the same seed.
+    final probe = MineField(size: 6, mineCount: 5, random: math.Random(1))
+      ..plantMines(0);
+    await tester.pumpWidget(
+      MaterialApp(home: TinyMinesScreen(random: math.Random(1))),
+    );
+    final tiles = find.descendant(
+      of: find.byType(GridView),
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(tiles.at(0));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Reveal one safe tile (+10s)'));
+    await tester.pump();
+    for (var i = 0; i < 36; i++) {
+      if (probe.cells[i].mine) continue;
+      await tester.tap(tiles.at(i), warnIfMissed: false);
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Field cleared in 0:10'), findsOneWidget);
+    expect(await const BestTimes().load('easy'), 10);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

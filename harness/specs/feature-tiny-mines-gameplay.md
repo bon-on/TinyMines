@@ -29,9 +29,9 @@ on the time leaderboard.
 - Each hint adds a fixed time penalty to the clock, shown in the hint tooltip.
 - Best clear time per difficulty is stored locally (shared_preferences) and
   shown as a HUD metric; storage failures never break play.
-- On web the app reserves the 48 px hub bar height at the top, because the
-  shell's CSS did not move the canvas and the title/hint/restart row sat
-  under the bar.
+- On web the Flutter view is embedded in the `#game-host` element below the
+  hub bar (web/index.html), so the header row is never covered. Right-click
+  flags, so the browser context menu is disabled on web.
 - After a loss, flags that sat on safe tiles are marked as wrong flags.
 - The play column is centered with a max width of 560 px; tiles show a click
   cursor on desktop and scale numbers/icons with tile size so 12x12 stays
