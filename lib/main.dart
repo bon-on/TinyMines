@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'best_times.dart';
 import 'mine_field.dart';
@@ -26,19 +25,10 @@ class TinyMinesApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      // The static web shell draws a fixed 48px hub bar over the canvas; keep
-      // the game below it so the title row and hint/restart buttons stay hit-testable.
-      builder: (context, child) => Padding(
-        padding: EdgeInsets.only(top: kIsWeb ? webHubBarHeight : 0),
-        child: child,
-      ),
       home: const TinyMinesScreen(),
     );
   }
 }
-
-/// Height of the hub navigation bar from web/index.html (--games-nav-height).
-const double webHubBarHeight = 48;
 
 /// Seconds added to the clock for each hint, so hinted clears rank lower.
 const int _hintPenaltySeconds = 10;
