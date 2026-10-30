@@ -26,6 +26,14 @@ class MineField {
   bool get won => cells.where((c) => !c.mine).every((c) => c.revealed);
   int get flags => cells.where((cell) => cell.flagged).length;
 
+  /// Indexes of flags placed on safe tiles; shown as mistakes after a loss.
+  List<int> get wrongFlags => lost
+      ? [
+          for (var i = 0; i < cells.length; i++)
+            if (cells[i].flagged && !cells[i].mine) i,
+        ]
+      : const [];
+
   Iterable<int> neighbors(int index) sync* {
     final row = index ~/ size;
     final col = index % size;

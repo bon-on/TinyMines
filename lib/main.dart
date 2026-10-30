@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'best_times.dart';
 import 'mine_field.dart';
 import 'result_registration.dart';
 
@@ -24,19 +26,35 @@ class TinyMinesApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      // The static web shell draws a fixed 48px hub bar over the canvas; keep
+      // the game below it so the title row and hint/restart buttons stay hit-testable.
+      builder: (context, child) => Padding(
+        padding: EdgeInsets.only(top: kIsWeb ? webHubBarHeight : 0),
+        child: child,
+      ),
       home: const TinyMinesScreen(),
     );
   }
 }
 
+/// Height of the hub navigation bar from web/index.html (--games-nav-height).
+const double webHubBarHeight = 48;
+
 /// Seconds added to the clock for each hint, so hinted clears rank lower.
 const int _hintPenaltySeconds = 10;
 
 class TinyMinesScreen extends StatefulWidget {
-  const TinyMinesScreen({super.key, this.random});
+  const TinyMinesScreen({
+    super.key,
+    this.random,
+    this.bestTimes = const BestTimes(),
+  });
 
   /// Mine placement source; tests pass a seeded generator.
   final math.Random? random;
+
+  /// Local best-time storage; tests can substitute mock preferences.
+  final BestTimes bestTimes;
 
   @override
   State<TinyMinesScreen> createState() => _TinyMinesScreenState();
@@ -48,6 +66,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   int _moves = 0;
   int _elapsedSeconds = 0;
   int _hints = 3;
+  final Map<_Difficulty, int?> _bests = {};
   Timer? _timer;
 
   bool get _lost => _field.lost;
@@ -57,12 +76,26 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   void initState() {
     super.initState();
     _restart();
+    _loadBest(_difficulty);
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadBest(_Difficulty difficulty) async {
+    final best = await widget.bestTimes.load(difficulty.name);
+    if (!mounted) return;
+    setState(() => _bests[difficulty] = best);
+  }
+
+  Future<void> _recordBest(_Difficulty difficulty, int seconds) async {
+    if (await widget.bestTimes.record(difficulty.name, seconds)) {
+      if (!mounted) return;
+      setState(() => _bests[difficulty] = seconds);
+    }
   }
 
   void _restart() {
@@ -109,6 +142,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (_lost || _won) _stopTimer();
     setState(() {});
     if (_won) {
+      _recordBest(_difficulty, _elapsedSeconds);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           offerResultRegistration(
@@ -131,6 +165,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (_difficulty == difficulty) return;
     _difficulty = difficulty;
     _restart();
+    _loadBest(difficulty);
   }
 
   void _useHint() {
@@ -153,77 +188,84 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-          child: Column(
-            children: [
-              _Header(
-                flags: _field.flags,
-                hints: _hints,
-                seconds: _elapsedSeconds,
-                moves: _moves,
-                mines: _difficulty.mines,
-                onRestart: _restart,
-                onHint: _field.armed && !_lost && !_won && _hints > 0
-                    ? _useHint
-                    : null,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              child: Column(
+                children: [
+                  _Header(
+                    flags: _field.flags,
+                    hints: _hints,
+                    seconds: _elapsedSeconds,
+                    moves: _moves,
+                    best: _bests[_difficulty],
+                    mines: _difficulty.mines,
+                    onRestart: _restart,
+                    onHint: _field.armed && !_lost && !_won && _hints > 0
+                        ? _useHint
+                        : null,
+                  ),
+                  const SizedBox(height: 10),
+                  _DifficultyPicker(
+                    difficulty: _difficulty,
+                    onChanged: _selectDifficulty,
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final boardSize = math.min(
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                        );
+                        return Center(
+                          child: SizedBox.square(
+                            dimension: boardSize,
+                            child: GridView.builder(
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _field.cells.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: _difficulty.size,
+                                    crossAxisSpacing: _difficulty.gap,
+                                    mainAxisSpacing: _difficulty.gap,
+                                  ),
+                              itemBuilder: (context, index) {
+                                return _MineTile(
+                                  cell: _field.cells[index],
+                                  lost: _lost,
+                                  onTap: () => _tapCell(index),
+                                  onFlag: () => _toggleFlag(index),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    status,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFD1D9E0),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (_lost || _won) ...[
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _restart,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('New Field'),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 10),
-              _DifficultyPicker(
-                difficulty: _difficulty,
-                onChanged: _selectDifficulty,
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final boardSize = math.min(
-                      constraints.maxWidth,
-                      constraints.maxHeight,
-                    );
-                    return Center(
-                      child: SizedBox.square(
-                        dimension: boardSize,
-                        child: GridView.builder(
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _field.cells.length,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: _difficulty.size,
-                                crossAxisSpacing: _difficulty.gap,
-                                mainAxisSpacing: _difficulty.gap,
-                              ),
-                          itemBuilder: (context, index) {
-                            return _MineTile(
-                              cell: _field.cells[index],
-                              onTap: () => _tapCell(index),
-                              onFlag: () => _toggleFlag(index),
-                            );
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                status,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFFD1D9E0),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (_lost || _won) ...[
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: _restart,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('New Field'),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -234,7 +276,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 enum _Difficulty {
   easy('Easy', 6, 5, 3),
   normal('Normal', 9, 12, 3),
-  hard('Hard', 12, 28, 4);
+  hard('Hard', 12, 26, 4);
 
   const _Difficulty(this.label, this.size, this.mines, this.hints);
 
@@ -284,6 +326,7 @@ class _Header extends StatelessWidget {
     required this.hints,
     required this.seconds,
     required this.moves,
+    required this.best,
     required this.mines,
     required this.onRestart,
     required this.onHint,
@@ -293,6 +336,7 @@ class _Header extends StatelessWidget {
   final int hints;
   final int seconds;
   final int moves;
+  final int? best;
   final int mines;
   final VoidCallback onRestart;
   final VoidCallback? onHint;
@@ -343,6 +387,13 @@ class _Header extends StatelessWidget {
             Expanded(
               child: _Metric(label: 'Moves', value: '$moves'),
             ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _Metric(
+                label: 'Best',
+                value: best == null ? '--' : _formatTime(best!),
+              ),
+            ),
           ],
         ),
       ],
@@ -388,16 +439,19 @@ class _Metric extends StatelessWidget {
 class _MineTile extends StatelessWidget {
   const _MineTile({
     required this.cell,
+    required this.lost,
     required this.onTap,
     required this.onFlag,
   });
 
   final MineCell cell;
+  final bool lost;
   final VoidCallback onTap;
   final VoidCallback onFlag;
 
   @override
   Widget build(BuildContext context) {
+    final wrongFlag = lost && cell.flagged && !cell.mine;
     final content = cell.revealed
         ? cell.mine
               ? Icons.close
@@ -405,37 +459,70 @@ class _MineTile extends StatelessWidget {
         : cell.flagged
         ? Icons.flag
         : null;
+    final interactive = !cell.revealed || cell.nearby > 0;
     return Material(
-      color: cell.revealed ? const Color(0xFF252B2E) : const Color(0xFF65756F),
+      color: wrongFlag
+          ? const Color(0xFF4A2A2C)
+          : cell.revealed
+          ? const Color(0xFF252B2E)
+          : const Color(0xFF65756F),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
+        mouseCursor: interactive && !lost
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        hoverColor: const Color(0x33FFFFFF),
         onTap: onTap,
         onLongPress: onFlag,
         onSecondaryTap: onFlag,
-        child: Center(
-          child: content != null
-              ? Container(
-                  width: 26,
-                  height: 26,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFE5484D),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    content,
-                    color: const Color(0xFFFFFFFF),
-                    size: 17,
-                  ),
-                )
-              : Text(
-                  cell.revealed && cell.nearby > 0 ? '${cell.nearby}' : '',
-                  style: TextStyle(
-                    color: _numberColor(cell.nearby),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final side = math.min(box.maxWidth, box.maxHeight);
+            return Center(
+              child: wrongFlag
+                  ? Semantics(
+                      label: 'Wrong flag',
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Icon(
+                            Icons.flag,
+                            color: const Color(0xFF95A2AF),
+                            size: side * 0.55,
+                          ),
+                          Icon(
+                            Icons.close,
+                            color: const Color(0xFFE5484D),
+                            size: side * 0.8,
+                          ),
+                        ],
+                      ),
+                    )
+                  : content != null
+                  ? Container(
+                      width: side * 0.68,
+                      height: side * 0.68,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE5484D),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        content,
+                        color: const Color(0xFFFFFFFF),
+                        size: side * 0.45,
+                      ),
+                    )
+                  : Text(
+                      cell.revealed && cell.nearby > 0 ? '${cell.nearby}' : '',
+                      style: TextStyle(
+                        color: _numberColor(cell.nearby),
+                        fontSize: side * 0.55,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+            );
+          },
         ),
       ),
     );
@@ -447,6 +534,8 @@ class _MineTile extends StatelessWidget {
       2 => const Color(0xFFA7F3D0),
       3 => const Color(0xFFFDE68A),
       4 => const Color(0xFFFCA5A5),
+      5 => const Color(0xFFF0ABFC),
+      6 => const Color(0xFF5EEAD4),
       _ => Colors.white,
     };
   }

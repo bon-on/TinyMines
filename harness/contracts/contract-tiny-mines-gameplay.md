@@ -17,6 +17,8 @@ clean ones.
 ## Done Criteria
 - Right-click flags, chord clears solved numbers, and hints cost time.
 - `MineField` unit tests cover first-reveal safety, chord, flags, hints and win.
+- Best time per difficulty persists locally and shows in the HUD; wrong flags
+  are marked after a loss; layout is centered with a max width.
 - Flutter tests and harness audit pass.
 
 ## Verification
