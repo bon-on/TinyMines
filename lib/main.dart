@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'mine_field.dart';
 import 'result_registration.dart';
 
 void main() => runApp(const TinyMinesApp());
@@ -28,28 +29,29 @@ class TinyMinesApp extends StatelessWidget {
   }
 }
 
+/// Seconds added to the clock for each hint, so hinted clears rank lower.
+const int _hintPenaltySeconds = 10;
+
 class TinyMinesScreen extends StatefulWidget {
-  const TinyMinesScreen({super.key});
+  const TinyMinesScreen({super.key, this.random});
+
+  /// Mine placement source; tests pass a seeded generator.
+  final math.Random? random;
 
   @override
   State<TinyMinesScreen> createState() => _TinyMinesScreenState();
 }
 
 class _TinyMinesScreenState extends State<TinyMinesScreen> {
-  final math.Random _random = math.Random();
   _Difficulty _difficulty = _Difficulty.easy;
-  late List<_MineCell> _cells;
-  bool _armed = false;
-  bool _lost = false;
-  bool _won = false;
+  late MineField _field;
   int _moves = 0;
   int _elapsedSeconds = 0;
   int _hints = 3;
   Timer? _timer;
 
-  int get _size => _difficulty.size;
-  int get _mineCount => _difficulty.mines;
-  int get _flags => _cells.where((cell) => cell.flagged).length;
+  bool get _lost => _field.lost;
+  bool get _won => _field.won;
 
   @override
   void initState() {
@@ -65,48 +67,15 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   void _restart() {
     _timer?.cancel();
-    _cells = List.generate(_size * _size, (_) => _MineCell());
-    _armed = false;
-    _lost = false;
-    _won = false;
+    _field = MineField(
+      size: _difficulty.size,
+      mineCount: _difficulty.mines,
+      random: widget.random,
+    );
     _moves = 0;
     _elapsedSeconds = 0;
     _hints = _difficulty.hints;
     setState(() {});
-  }
-
-  int _index(int row, int col) => row * _size + col;
-
-  Iterable<int> _neighbors(int index) sync* {
-    final row = index ~/ _size;
-    final col = index % _size;
-    for (var dr = -1; dr <= 1; dr++) {
-      for (var dc = -1; dc <= 1; dc++) {
-        if (dr == 0 && dc == 0) continue;
-        final nr = row + dr;
-        final nc = col + dc;
-        if (nr >= 0 && nr < _size && nc >= 0 && nc < _size) {
-          yield _index(nr, nc);
-        }
-      }
-    }
-  }
-
-  void _plantMines(int safeIndex) {
-    final blocked = {safeIndex, ..._neighbors(safeIndex)};
-    final candidates = [
-      for (var i = 0; i < _cells.length; i++)
-        if (!blocked.contains(i)) i,
-    ]..shuffle(_random);
-
-    for (final index in candidates.take(_mineCount)) {
-      _cells[index].mine = true;
-    }
-    for (var i = 0; i < _cells.length; i++) {
-      _cells[i].nearby = _neighbors(i).where((n) => _cells[n].mine).length;
-    }
-    _armed = true;
-    _startTimer();
   }
 
   void _startTimer() {
@@ -124,44 +93,22 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _timer = null;
   }
 
-  void _reveal(int index, {bool fromHint = false}) {
+  void _tapCell(int index) {
     if (_lost || _won) return;
-    if (!_armed) _plantMines(index);
-    final cell = _cells[index];
-    if (cell.flagged || cell.revealed) return;
-    if (!fromHint) _moves++;
+    final wasArmed = _field.armed;
+    final outcome = _field.cells[index].revealed
+        ? _field.chord(index)
+        : _field.reveal(index);
+    if (outcome == RevealOutcome.none) return;
+    if (!wasArmed) _startTimer();
+    _moves++;
+    _afterReveal();
+  }
 
-    if (cell.mine) {
-      cell.revealed = true;
-      _lost = true;
-      _stopTimer();
-      for (final mineCell in _cells.where((c) => c.mine)) {
-        mineCell.revealed = true;
-      }
-      setState(() {});
-      return;
-    }
-
-    final queue = <int>[index];
-    while (queue.isNotEmpty) {
-      final current = queue.removeLast();
-      final currentCell = _cells[current];
-      if (currentCell.revealed || currentCell.flagged) continue;
-      currentCell.revealed = true;
-      if (currentCell.nearby == 0) {
-        for (final next in _neighbors(current)) {
-          final nextCell = _cells[next];
-          if (!nextCell.revealed && !nextCell.flagged && !nextCell.mine) {
-            queue.add(next);
-          }
-        }
-      }
-    }
-    final wasWon = _won;
-    _won = _cells.where((c) => !c.mine).every((c) => c.revealed);
-    if (_won) _stopTimer();
+  void _afterReveal() {
+    if (_lost || _won) _stopTimer();
     setState(() {});
-    if (_won && !wasWon) {
+    if (_won) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           offerResultRegistration(
@@ -177,11 +124,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _toggleFlag(int index) {
-    if (_lost || _won) return;
-    final cell = _cells[index];
-    if (cell.revealed) return;
-    cell.flagged = !cell.flagged;
-    setState(() {});
+    if (_field.toggleFlag(index)) setState(() {});
   }
 
   void _selectDifficulty(_Difficulty difficulty) {
@@ -191,15 +134,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _useHint() {
-    if (!_armed || _lost || _won || _hints == 0) return;
-    final candidates = [
-      for (var i = 0; i < _cells.length; i++)
-        if (!_cells[i].mine && !_cells[i].revealed && !_cells[i].flagged) i,
-    ];
-    if (candidates.isEmpty) return;
-    candidates.sort((a, b) => _cells[a].nearby.compareTo(_cells[b].nearby));
+    if (_hints == 0) return;
+    final candidate = _field.hintCandidate();
+    if (candidate == null) return;
     _hints--;
-    _reveal(candidates.first, fromHint: true);
+    _elapsedSeconds += _hintPenaltySeconds;
+    _field.reveal(candidate);
+    _afterReveal();
   }
 
   @override
@@ -208,7 +149,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         ? 'Mine hit. Try a cleaner sweep.'
         : _won
         ? 'Field cleared in ${_formatTime(_elapsedSeconds)}.'
-        : 'Tap to reveal. Long press to flag.';
+        : 'Tap to reveal. Long press or right-click to flag. Tap a number to clear around it.';
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: SafeArea(
@@ -217,13 +158,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           child: Column(
             children: [
               _Header(
-                flags: _flags,
+                flags: _field.flags,
                 hints: _hints,
                 seconds: _elapsedSeconds,
                 moves: _moves,
-                mines: _mineCount,
+                mines: _difficulty.mines,
                 onRestart: _restart,
-                onHint: _armed && !_lost && !_won && _hints > 0
+                onHint: _field.armed && !_lost && !_won && _hints > 0
                     ? _useHint
                     : null,
               ),
@@ -245,18 +186,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                         dimension: boardSize,
                         child: GridView.builder(
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _cells.length,
+                          itemCount: _field.cells.length,
                           gridDelegate:
                               SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: _size,
+                                crossAxisCount: _difficulty.size,
                                 crossAxisSpacing: _difficulty.gap,
                                 mainAxisSpacing: _difficulty.gap,
                               ),
                           itemBuilder: (context, index) {
                             return _MineTile(
-                              cell: _cells[index],
-                              onTap: () => _reveal(index),
-                              onLongPress: () => _toggleFlag(index),
+                              cell: _field.cells[index],
+                              onTap: () => _tapCell(index),
+                              onFlag: () => _toggleFlag(index),
                             );
                           },
                         ),
@@ -288,13 +229,6 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       ),
     );
   }
-}
-
-class _MineCell {
-  bool mine = false;
-  bool revealed = false;
-  bool flagged = false;
-  int nearby = 0;
 }
 
 enum _Difficulty {
@@ -377,7 +311,7 @@ class _Header extends StatelessWidget {
             ),
             IconButton(
               onPressed: onHint,
-              tooltip: 'Reveal one safe tile',
+              tooltip: 'Reveal one safe tile (+${_hintPenaltySeconds}s)',
               icon: Badge(
                 label: Text('$hints'),
                 isLabelVisible: hints > 0,
@@ -455,12 +389,12 @@ class _MineTile extends StatelessWidget {
   const _MineTile({
     required this.cell,
     required this.onTap,
-    required this.onLongPress,
+    required this.onFlag,
   });
 
-  final _MineCell cell;
+  final MineCell cell;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback onFlag;
 
   @override
   Widget build(BuildContext context) {
@@ -477,7 +411,8 @@ class _MineTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: onTap,
-        onLongPress: onLongPress,
+        onLongPress: onFlag,
+        onSecondaryTap: onFlag,
         child: Center(
           child: content != null
               ? Container(
