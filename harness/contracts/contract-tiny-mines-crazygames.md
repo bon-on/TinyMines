@@ -4,6 +4,7 @@ title: Tiny Mines CrazyGames web distribution contract
 status: active
 related_specs:
   - feature-tiny-mines-crazygames
+  - feature-sound-effects
 evidence_files:
   - docs/crazygames.md
   - reports/tiny-mines-crazygames-verification.md

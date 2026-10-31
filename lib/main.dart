@@ -9,6 +9,7 @@ import 'how_to_play.dart';
 import 'mine_field.dart';
 import 'platform/game_platform.dart';
 import 'result_registration.dart';
+import 'src/audio/sound_fx.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,9 +26,16 @@ Future<void> main() async {
 }
 
 class TinyMinesApp extends StatelessWidget {
-  const TinyMinesApp({super.key, this.platform = const NoopGamePlatform()});
+  const TinyMinesApp({
+    super.key,
+    this.platform = const NoopGamePlatform(),
+    this.soundFx,
+  });
 
   final GamePlatform platform;
+
+  /// Injectable sound effects; tests pass a recording one.
+  final SoundFx? soundFx;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +51,7 @@ class TinyMinesApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: TinyMinesScreen(platform: platform),
+      home: TinyMinesScreen(platform: platform, soundFx: soundFx),
     );
   }
 }
@@ -74,7 +82,11 @@ class TinyMinesScreen extends StatefulWidget {
     this.tutorialStore = const TutorialStore(),
     this.platform = const NoopGamePlatform(),
     this.stopwatch,
+    this.soundFx,
   });
+
+  /// Sound effects and mute switch; defaults to the real player.
+  final SoundFx? soundFx;
 
   /// Clock for the solve time; tests can inject a controllable one.
   final Stopwatch? stopwatch;
@@ -113,6 +125,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   // Gameplay events wait until the first-run tutorial check has answered.
   bool _tutorialChecked = false;
   bool _gameplayActive = false;
+  late final SoundFx _sound =
+      widget.soundFx ?? SoundFx(platform: widget.platform);
 
   bool get _lost => _field.lost;
   bool get _won => _field.won;
@@ -120,6 +134,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   @override
   void initState() {
     super.initState();
+    _sound.addListener(_onSoundChanged);
+    if (widget.soundFx == null) _sound.load();
     _restart();
     _loadBest(_difficulty);
     _maybeShowTutorial();
@@ -173,8 +189,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     widget.tutorialStore.markSeen();
   }
 
+  void _onSoundChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _sound.removeListener(_onSoundChanged);
+    if (widget.soundFx == null) _sound.dispose();
     _timer?.cancel();
     super.dispose();
   }
@@ -235,6 +257,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _afterReveal() {
+    _sound.play(
+      _lost
+          ? Sfx.boom
+          : _won
+          ? Sfx.win
+          : Sfx.reveal,
+    );
     if (_lost || _won) _stopTimer();
     setState(() {});
     _syncGameplay();
@@ -256,7 +285,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _toggleFlag(int index) {
-    if (_field.toggleFlag(index)) setState(() {});
+    if (!_field.toggleFlag(index)) return;
+    _sound.play(Sfx.flag);
+    setState(() {});
   }
 
   void _selectDifficulty(_Difficulty difficulty) {
@@ -327,6 +358,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     mines: _difficulty.mines,
                     onRestart: _restart,
                     onHelp: _openTutorial,
+                    soundMuted: _sound.userMuted,
+                    onToggleSound: _sound.toggle,
                     onHint: _field.armed && !_lost && !_won && _hints > 0
                         ? _useHint
                         : null,
@@ -455,6 +488,8 @@ class _Header extends StatelessWidget {
     required this.mines,
     required this.onRestart,
     required this.onHelp,
+    required this.soundMuted,
+    required this.onToggleSound,
     required this.onHint,
   });
 
@@ -466,6 +501,8 @@ class _Header extends StatelessWidget {
   final int mines;
   final VoidCallback onRestart;
   final VoidCallback onHelp;
+  final bool soundMuted;
+  final VoidCallback onToggleSound;
   final VoidCallback? onHint;
 
   @override
@@ -484,6 +521,13 @@ class _Header extends StatelessWidget {
               onPressed: onHelp,
               tooltip: 'How to play',
               icon: const Icon(Icons.help_outline),
+            ),
+            IconButton(
+              onPressed: onToggleSound,
+              tooltip: soundMuted ? 'Sound off' : 'Sound on',
+              icon: Icon(
+                soundMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              ),
             ),
             IconButton(
               onPressed: onHint,
