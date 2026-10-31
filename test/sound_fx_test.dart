@@ -283,6 +283,69 @@ void main() {
       expect(player.played.where((a) => a.endsWith('boom.wav')), isEmpty);
     });
 
+    testWidgets('a chord plays one reveal, or one boom on a wrong flag', (
+      tester,
+    ) async {
+      final reference = _field()..reveal(0);
+      // A revealed number with a hidden mine and a hidden safe tile around it.
+      bool hidden(int n, {required bool mine}) =>
+          !reference.cells[n].revealed && reference.cells[n].mine == mine;
+      final number = [for (var i = 0; i < reference.cells.length; i++) i]
+          .firstWhere(
+            (i) =>
+                reference.cells[i].revealed &&
+                reference.cells[i].nearby > 0 &&
+                reference.neighbors(i).any((n) => hidden(n, mine: true)) &&
+                reference.neighbors(i).any((n) => hidden(n, mine: false)),
+          );
+      final around = reference.neighbors(number).toList();
+      final mines = around.where((n) => reference.cells[n].mine).toList();
+      final safeHidden = around
+          .where(
+            (n) => !reference.cells[n].mine && !reference.cells[n].revealed,
+          )
+          .toList();
+
+      for (final wrong in <bool>[false, true]) {
+        final player = _RecordingPlayer();
+        await _pump(tester, SoundFx(player: player));
+        await tester.tap(_tiles.at(0));
+        await tester.pump();
+        final flags = [...mines];
+        if (wrong) {
+          if (safeHidden.isEmpty) continue;
+          flags[0] = safeHidden.first;
+        }
+        for (final f in flags) {
+          await tester.longPress(_tiles.at(f));
+          await tester.pump();
+        }
+        player.played.clear();
+        await tester.tap(_tiles.at(number));
+        await tester.pump();
+        expect(player.played, [
+          wrong ? 'assets/audio/boom.wav' : 'assets/audio/reveal.wav',
+        ], reason: 'wrong flag: $wrong');
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    });
+
+    testWidgets('timer ticks and the tutorial card make no sound', (
+      tester,
+    ) async {
+      final player = _RecordingPlayer();
+      await _pump(tester, SoundFx(player: player));
+      await tester.tap(_tiles.at(0));
+      await tester.pump();
+      player.played.clear();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.tap(find.byTooltip('How to play'));
+      await tester.pump();
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+      expect(player.played, isEmpty);
+    });
+
     testWidgets('a hint plays the reveal sound once', (tester) async {
       final player = _RecordingPlayer();
       await _pump(tester, SoundFx(player: player));
