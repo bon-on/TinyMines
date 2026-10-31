@@ -511,10 +511,17 @@ class _Header extends StatelessWidget {
       children: [
         Row(
           children: [
+            // One line on narrow phones: scale the title down instead of
+            // wrapping it and pushing the board down.
             const Expanded(
-              child: Text(
-                'Tiny Mines',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Tiny Mines',
+                  maxLines: 1,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                ),
               ),
             ),
             IconButton(
