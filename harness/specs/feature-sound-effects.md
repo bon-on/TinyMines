@@ -49,8 +49,8 @@ iOS and Android, and players need a way to turn them off.
   "Sound off"). The choice is stored as the bool `sound_muted_v1` in
   `shared_preferences` (default: sound on). Effective mute is the user choice
   OR `GamePlatform.isAudioMuted`, which the CrazyGames adapter reads from
-  `CrazyGames.SDK.game.settings.muteAudio` on every sound; the no-op and
-  GamePix platforms return false.
+  `CrazyGames.SDK.game.settings.muteAudio` on every sound; the no-op platform (also used by GamePix
+  builds) returns false.
 - The button lives inside the same `ExcludeFocus` / `AbsorbPointer` subtree as
   "?", so it is blocked while the tutorial card is open or loading. The game
   has no keyboard controls, so there is no board focus to preserve. No new
