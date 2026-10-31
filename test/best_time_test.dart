@@ -8,7 +8,9 @@ import 'package:tiny_mines/main.dart';
 import 'package:tiny_mines/mine_field.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({'tutorial_seen_v1': true}),
+  );
   registerHintedWin();
 
   test('BestTimes keeps only the fastest time per difficulty', () async {
@@ -33,7 +35,10 @@ void main() {
   });
 
   testWidgets('HUD shows the stored best time per difficulty', (tester) async {
-    SharedPreferences.setMockInitialValues({'best_time_easy': 65});
+    SharedPreferences.setMockInitialValues({
+      'best_time_easy': 65,
+      'tutorial_seen_v1': true,
+    });
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

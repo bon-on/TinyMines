@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'best_times.dart';
+import 'how_to_play.dart';
 import 'mine_field.dart';
 import 'result_registration.dart';
 
@@ -40,11 +41,27 @@ class TinyMinesApp extends StatelessWidget {
 /// Seconds added to the clock for each hint, so hinted clears rank lower.
 const int _hintPenaltySeconds = 10;
 
+const List<TutorialStep> _tutorialSteps = [
+  TutorialStep(
+    Icons.grid_view,
+    'Clear every safe tile without hitting a mine. A number counts the mines around it.',
+  ),
+  TutorialStep(
+    Icons.flag,
+    'Tap or click to reveal. Long press or right-click to flag a mine.',
+  ),
+  TutorialStep(
+    Icons.lightbulb,
+    'Tap a number with all its flags placed to clear the rest. Hints cost +${_hintPenaltySeconds}s.',
+  ),
+];
+
 class TinyMinesScreen extends StatefulWidget {
   const TinyMinesScreen({
     super.key,
     this.random,
     this.bestTimes = const BestTimes(),
+    this.tutorialStore = const TutorialStore(),
   });
 
   /// Mine placement source; tests pass a seeded generator.
@@ -52,6 +69,9 @@ class TinyMinesScreen extends StatefulWidget {
 
   /// Local best-time storage; tests can substitute mock preferences.
   final BestTimes bestTimes;
+
+  /// First-run tutorial flag storage; tests can substitute a fake.
+  final TutorialStore tutorialStore;
 
   @override
   State<TinyMinesScreen> createState() => _TinyMinesScreenState();
@@ -65,6 +85,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   int _hints = 3;
   final Map<_Difficulty, int?> _bests = {};
   Timer? _timer;
+  bool _tutorialOpen = false;
+  int _tutorialSession = 0;
 
   bool get _lost => _field.lost;
   bool get _won => _field.won;
@@ -74,6 +96,28 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     super.initState();
     _restart();
     _loadBest(_difficulty);
+    _maybeShowTutorial();
+  }
+
+  Future<void> _maybeShowTutorial() async {
+    final session = _tutorialSession;
+    final seen = await widget.tutorialStore.hasSeen();
+    // Ignore a stale answer if the player already opened it via "?".
+    if (!mounted || seen || session != _tutorialSession) return;
+    _openTutorial();
+  }
+
+  void _openTutorial() {
+    _tutorialSession++;
+    _stopTimer();
+    setState(() => _tutorialOpen = true);
+  }
+
+  void _closeTutorial() {
+    if (!_tutorialOpen) return;
+    setState(() => _tutorialOpen = false);
+    if (_field.armed && !_lost && !_won) _startTimer();
+    widget.tutorialStore.markSeen();
   }
 
   @override
@@ -183,6 +227,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         : _won
         ? 'Field cleared in ${_formatTime(_elapsedSeconds)}.'
         : 'Tap to reveal. Long press or right-click to flag. Tap a number to clear around it.';
+    return Stack(
+      children: [
+        _buildGame(context, wrongFlags, status),
+        if (_tutorialOpen)
+          Positioned.fill(
+            child: HowToPlayOverlay(
+              steps: _tutorialSteps,
+              onClose: _closeTutorial,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildGame(BuildContext context, Set<int> wrongFlags, String status) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: SafeArea(
@@ -201,6 +260,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     best: _bests[_difficulty],
                     mines: _difficulty.mines,
                     onRestart: _restart,
+                    onHelp: _openTutorial,
                     onHint: _field.armed && !_lost && !_won && _hints > 0
                         ? _useHint
                         : null,
@@ -328,6 +388,7 @@ class _Header extends StatelessWidget {
     required this.best,
     required this.mines,
     required this.onRestart,
+    required this.onHelp,
     required this.onHint,
   });
 
@@ -338,6 +399,7 @@ class _Header extends StatelessWidget {
   final int? best;
   final int mines;
   final VoidCallback onRestart;
+  final VoidCallback onHelp;
   final VoidCallback? onHint;
 
   @override
@@ -351,6 +413,11 @@ class _Header extends StatelessWidget {
                 'Tiny Mines',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
               ),
+            ),
+            IconButton(
+              onPressed: onHelp,
+              tooltip: 'How to play',
+              icon: const Icon(Icons.help_outline),
             ),
             IconButton(
               onPressed: onHint,
