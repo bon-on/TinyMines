@@ -22,6 +22,7 @@ Players should register a trustworthy game-produced result without typing the re
 - If accepted, ask only for a 1-20 character player name.
 - Submit tiny-mines using metric time; ranking uses shortest completion time.
 - Keep gameplay available if the network is unavailable or registration is declined.
+- Exception: the CrazyGames build (`feature-tiny-mines-crazygames`) does not offer registration (`GamePlatform.allowsResultRegistration` is false).
 
 ## Acceptance Criteria
 - The prompt appears once per completed run.

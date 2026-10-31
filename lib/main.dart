@@ -7,17 +7,27 @@ import 'package:flutter/services.dart';
 import 'best_times.dart';
 import 'how_to_play.dart';
 import 'mine_field.dart';
+import 'platform/game_platform.dart';
 import 'result_registration.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Right-click flags tiles, so suppress the browser context menu.
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
-  runApp(const TinyMinesApp());
+  // Portal builds (CrazyGames) report gameplay events; others get a no-op.
+  final platform = createGamePlatform();
+  try {
+    await platform.initialize();
+  } catch (_) {
+    // A broken portal SDK must never keep the game from starting.
+  }
+  runApp(TinyMinesApp(platform: platform));
 }
 
 class TinyMinesApp extends StatelessWidget {
-  const TinyMinesApp({super.key});
+  const TinyMinesApp({super.key, this.platform = const NoopGamePlatform()});
+
+  final GamePlatform platform;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +43,7 @@ class TinyMinesApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const TinyMinesScreen(),
+      home: TinyMinesScreen(platform: platform),
     );
   }
 }
@@ -62,7 +72,11 @@ class TinyMinesScreen extends StatefulWidget {
     this.random,
     this.bestTimes = const BestTimes(),
     this.tutorialStore = const TutorialStore(),
+    this.platform = const NoopGamePlatform(),
   });
+
+  /// Portal hooks (gameplay events, leaderboard policy); no-op by default.
+  final GamePlatform platform;
 
   /// Mine placement source; tests pass a seeded generator.
   final math.Random? random;
@@ -87,6 +101,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   Timer? _timer;
   bool _tutorialOpen = false;
   int _tutorialSession = 0;
+  // Gameplay events wait until the first-run tutorial check has answered.
+  bool _tutorialChecked = false;
+  bool _gameplayActive = false;
 
   bool get _lost => _field.lost;
   bool get _won => _field.won;
@@ -101,21 +118,47 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   Future<void> _maybeShowTutorial() async {
     final session = _tutorialSession;
-    final seen = await widget.tutorialStore.hasSeen();
+    var seen = false;
+    try {
+      seen = await widget.tutorialStore.hasSeen();
+    } catch (_) {}
+    if (!mounted) return;
+    _tutorialChecked = true;
     // Ignore a stale answer if the player already opened it via "?".
-    if (!mounted || seen || session != _tutorialSession) return;
+    if (seen || session != _tutorialSession) {
+      _syncGameplay();
+      return;
+    }
     _openTutorial();
+  }
+
+  /// Reports gameplay start/stop to the platform exactly on transitions:
+  /// running only after the tutorial check, while no tutorial is open and the
+  /// field is not finished.
+  void _syncGameplay() {
+    final wantActive = _tutorialChecked && !_tutorialOpen && !_lost && !_won;
+    if (wantActive == _gameplayActive) return;
+    _gameplayActive = wantActive;
+    try {
+      if (wantActive) {
+        widget.platform.gameplayStart();
+      } else {
+        widget.platform.gameplayStop();
+      }
+    } catch (_) {}
   }
 
   void _openTutorial() {
     _tutorialSession++;
     _stopTimer();
     setState(() => _tutorialOpen = true);
+    _syncGameplay();
   }
 
   void _closeTutorial() {
     if (!_tutorialOpen) return;
     setState(() => _tutorialOpen = false);
+    _syncGameplay();
     if (_field.armed && !_lost && !_won) _startTimer();
     widget.tutorialStore.markSeen();
   }
@@ -150,6 +193,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _elapsedSeconds = 0;
     _hints = _difficulty.hints;
     setState(() {});
+    _syncGameplay();
   }
 
   void _startTimer() {
@@ -182,8 +226,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   void _afterReveal() {
     if (_lost || _won) _stopTimer();
     setState(() {});
+    _syncGameplay();
     if (_won) {
       _recordBest(_difficulty, _elapsedSeconds);
+      if (!widget.platform.allowsResultRegistration) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           offerResultRegistration(
