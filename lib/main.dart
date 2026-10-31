@@ -292,7 +292,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           absorbing: !_tutorialChecked,
           // Keep keyboard focus (Tab, Enter) out of the game under the card.
           child: ExcludeFocus(
-            excluding: _tutorialOpen,
+            excluding: _tutorialOpen || !_tutorialChecked,
             child: _buildGame(context, wrongFlags, status),
           ),
         ),
