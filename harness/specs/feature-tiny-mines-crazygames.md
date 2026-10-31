@@ -24,7 +24,7 @@ The GitHub Pages build cannot be uploaded to the CrazyGames portal as is: the po
 - SDK events (`GamePlatform.gameplayStart` / `gameplayStop`), sent only on transitions:
   - start once the first-run tutorial check has answered and no overlay is open;
   - stop when the how-to-play overlay opens, start when it closes;
-  - stop on game over / field cleared, start again on restart, new field, mode switch or undo that revives the run.
+  - stop on game over / field cleared, start again on restart, new field or difficulty switch.
 - SDK failures (script missing, `init()` rejects or hangs, environment `disabled`, call throws) downgrade to no-op and never break play.
 - No outbound links in the CrazyGames bundle: the Bon-on hub navigation bar (`feature-game-hub-navigation`) and its reserved height are removed by the build script; the leaderboard prompt (`feature-post-game-leaderboard`) is skipped via `GamePlatform.allowsResultRegistration == false`.
 - No ads of any kind in the CrazyGames bundle (Basic Launch forbids them). The game has no ad network.

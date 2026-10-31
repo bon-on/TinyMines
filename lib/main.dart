@@ -132,7 +132,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       seen = await widget.tutorialStore.hasSeen();
     } catch (_) {}
     if (!mounted) return;
-    _tutorialChecked = true;
+    // Rebuild so the pointer gate in build() lifts even if nothing else does.
+    setState(() => _tutorialChecked = true);
     // Ignore a stale answer if the player already opened it via "?".
     if (seen || session != _tutorialSession) {
       _syncGameplay();

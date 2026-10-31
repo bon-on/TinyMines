@@ -34,6 +34,7 @@ with a way to skip it.
   failure just closes it.
 - The store is injectable (`TutorialStore`) so tests do not need real prefs.
 - Text is English, card max width 360 px, scrollable for short viewports.
+- Pointer input is ignored until the seen-flag read has answered; the card does not consume Tab, F5 or Ctrl/Meta/Alt shortcuts. The solve clock is stopwatch-based, so brief tutorial visits keep partial seconds.
 
 ## Acceptance Criteria
 - Unset flag: overlay shown at launch and taps on tiles do nothing.

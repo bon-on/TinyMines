@@ -31,6 +31,18 @@ class _SlowStore extends TutorialStore {
   Future<void> markSeen() async {}
 }
 
+class _LateSeenStore extends TutorialStore {
+  final Completer<void> release = Completer<void>();
+  @override
+  Future<bool> hasSeen() async {
+    await release.future;
+    return true;
+  }
+
+  @override
+  Future<void> markSeen() async {}
+}
+
 Finder get _tiles =>
     find.descendant(of: find.byType(GridView), matching: find.byType(InkWell));
 
@@ -226,11 +238,35 @@ void main() {
     expect(watch.isRunning, isFalse, reason: 'game is still untouched');
   });
 
+  testWidgets('board accepts taps after a late seen answer', (tester) async {
+    final store = _LateSeenStore();
+    final watch = FakeStopwatch();
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TinyMinesScreen(
+          random: math.Random(1),
+          tutorialStore: store,
+          stopwatch: watch,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    store.release.complete();
+    await tester.pumpAndSettle();
+    await tester.tap(_tiles.first);
+    await tester.pump();
+    expect(watch.isRunning, isTrue, reason: 'first tap must register');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Tab and Ctrl shortcuts are not swallowed by the card', (
     tester,
   ) async {
     await _pump(tester, _FakeStore());
-    await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+    expect(await tester.sendKeyEvent(LogicalKeyboardKey.f5), isFalse);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);

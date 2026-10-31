@@ -45,7 +45,7 @@ On `localhost` the SDK environment is `local`; the console shows `Requesting gam
 | How-to-play overlay opens | `gameplayStop()` |
 | Overlay closes | `gameplayStart()` |
 | Game over / field cleared | `gameplayStop()` |
-| Restart, new game, mode switch, undo that revives the run | `gameplayStart()` |
+| Restart, new field, difficulty switch | `gameplayStart()` |
 
 Calls are sent on transitions only. Leaderboard registration prompts are disabled in this build, and there are no ads.
 
