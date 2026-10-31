@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tiny_mines/best_times.dart';
 import 'package:tiny_mines/main.dart';
+
+import 'support/fake_stopwatch.dart';
 import 'package:tiny_mines/mine_field.dart';
 
 void main() {
@@ -83,8 +85,14 @@ void registerHintedWin() {
     final probe = MineField(size: 6, mineCount: 5, random: math.Random(1))
       ..plantMines(0);
     await tester.pumpWidget(
-      MaterialApp(home: TinyMinesScreen(random: math.Random(1))),
+      MaterialApp(
+        home: TinyMinesScreen(
+          random: math.Random(1),
+          stopwatch: FakeStopwatch(),
+        ),
+      ),
     );
+    await tester.pumpAndSettle();
     final tiles = find.descendant(
       of: find.byType(GridView),
       matching: find.byType(InkWell),

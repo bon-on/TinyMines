@@ -73,7 +73,11 @@ class TinyMinesScreen extends StatefulWidget {
     this.bestTimes = const BestTimes(),
     this.tutorialStore = const TutorialStore(),
     this.platform = const NoopGamePlatform(),
+    this.stopwatch,
   });
+
+  /// Clock for the solve time; tests can inject a controllable one.
+  final Stopwatch? stopwatch;
 
   /// Portal hooks (gameplay events, leaderboard policy); no-op by default.
   final GamePlatform platform;
@@ -95,7 +99,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   _Difficulty _difficulty = _Difficulty.easy;
   late MineField _field;
   int _moves = 0;
-  int _elapsedSeconds = 0;
+  // Elapsed time is measured by a stopwatch (paused while the tutorial is
+  // open) so brief pauses never discard partial seconds; the periodic timer
+  // only repaints the clock.
+  late final Stopwatch _clock = widget.stopwatch ?? Stopwatch();
+  int _hintPenalty = 0;
+  int get _elapsedSeconds => _clock.elapsedMilliseconds ~/ 1000 + _hintPenalty;
   int _hints = 3;
   final Map<_Difficulty, int?> _bests = {};
   Timer? _timer;
@@ -183,30 +192,31 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _restart() {
-    _timer?.cancel();
+    _stopTimer();
+    _clock.reset();
+    _hintPenalty = 0;
     _field = MineField(
       size: _difficulty.size,
       mineCount: _difficulty.mines,
       random: widget.random,
     );
     _moves = 0;
-    _elapsedSeconds = 0;
     _hints = _difficulty.hints;
     setState(() {});
     _syncGameplay();
   }
 
   void _startTimer() {
+    _clock.start();
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (!mounted || _lost || _won) return;
-      setState(() {
-        _elapsedSeconds++;
-      });
+      setState(() {});
     });
   }
 
   void _stopTimer() {
+    _clock.stop();
     _timer?.cancel();
     _timer = null;
   }
@@ -260,7 +270,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     final candidate = _field.hintCandidate();
     if (candidate == null) return;
     _hints--;
-    _elapsedSeconds += _hintPenaltySeconds;
+    _hintPenalty += _hintPenaltySeconds;
     _field.reveal(candidate);
     _afterReveal();
   }
@@ -275,7 +285,16 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         : 'Tap to reveal. Long press or right-click to flag. Tap a number to clear around it.';
     return Stack(
       children: [
-        _buildGame(context, wrongFlags, status),
+        // Taps are ignored until the first-run check has answered, so the
+        // tutorial cannot open on top of a half-started game.
+        AbsorbPointer(
+          absorbing: !_tutorialChecked,
+          // Keep keyboard focus (Tab, Enter) out of the game under the card.
+          child: ExcludeFocus(
+            excluding: _tutorialOpen,
+            child: _buildGame(context, wrongFlags, status),
+          ),
+        ),
         if (_tutorialOpen)
           Positioned.fill(
             child: HowToPlayOverlay(

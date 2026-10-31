@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tiny_mines/main.dart';
 
+import 'support/fake_stopwatch.dart';
+
 void main() {
   setUp(
     () => SharedPreferences.setMockInitialValues({'tutorial_seen_v1': true}),
@@ -15,8 +17,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(home: TinyMinesScreen(random: math.Random(1))),
+      MaterialApp(
+        home: TinyMinesScreen(
+          random: math.Random(1),
+          stopwatch: FakeStopwatch(),
+        ),
+      ),
     );
+    await tester.pumpAndSettle();
 
     final tiles = find.descendant(
       of: find.byType(GridView),
