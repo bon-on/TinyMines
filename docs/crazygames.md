@@ -60,4 +60,4 @@ Calls are sent on transitions only. Leaderboard registration prompts are disable
 ## Known limits
 
 - The board is a square grid; Easy/Normal/Hard are selectable.
-- Material's default font fallback may still be fetched from a Google font CDN.
+- Roboto is bundled (`assets/fonts/`), so the app does not fetch it from a Google font CDN.
