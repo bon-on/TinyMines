@@ -4,6 +4,7 @@ title: Deliver desktop-friendly Tiny Mines input and fair hint cost
 status: active
 related_specs:
   - feature-tiny-mines-gameplay
+  - feature-retention-polish
 evidence_files:
   - reports/tiny-mines-gameplay-verification.md
 ---

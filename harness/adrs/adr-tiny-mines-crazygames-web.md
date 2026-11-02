@@ -6,6 +6,7 @@ related_specs:
   - feature-tiny-mines-crazygames
   - feature-tiny-mines-gamepix
   - feature-sound-effects
+  - feature-retention-polish
 ---
 
 # ADR: Build flag and platform adapter for CrazyGames

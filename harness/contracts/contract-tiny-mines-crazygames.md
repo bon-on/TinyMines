@@ -5,6 +5,7 @@ status: active
 related_specs:
   - feature-tiny-mines-crazygames
   - feature-sound-effects
+  - feature-retention-polish
 evidence_files:
   - docs/crazygames.md
   - reports/tiny-mines-crazygames-verification.md
