@@ -1,6 +1,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Local best clear time per difficulty, stored with shared_preferences.
+/// Legacy local best clear time per difficulty (`best_time_<difficulty>`).
+///
+/// The game now keeps its records in `garden_progress_v1`
+/// (see `GardenProgressStore`), which migrates these keys on load and mirrors
+/// new bests back into them, so older builds still see the records.
 /// Storage failures are swallowed so the game never depends on persistence.
 class BestTimes {
   const BestTimes();
