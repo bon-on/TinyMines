@@ -15,6 +15,7 @@ class CrazyGamesPlatform extends GamePlatform {
   static const Duration _initTimeout = Duration(seconds: 5);
 
   _Sdk? _sdk;
+  void Function()? _muteListener;
 
   @override
   Future<void> initialize() async {
@@ -35,6 +36,26 @@ class CrazyGamesPlatform extends GamePlatform {
     } catch (error) {
       debugPrint('CrazyGames SDK init failed: $error');
       _sdk = null;
+      return;
+    }
+    // Optional: a missing listener API must not disable the SDK.
+    try {
+      sdk.game.addSettingsChangeListener(((JSAny? _) => _notifyMute()).toJS);
+    } catch (error) {
+      debugPrint('CrazyGames settings listener unavailable: $error');
+    }
+  }
+
+  @override
+  void setAudioMuteListener(void Function()? listener) {
+    _muteListener = listener;
+  }
+
+  void _notifyMute() {
+    try {
+      _muteListener?.call();
+    } catch (error) {
+      debugPrint('Audio mute listener failed: $error');
     }
   }
 
@@ -88,6 +109,7 @@ extension type _GameModule._(JSObject _) implements JSObject {
   external void gameplayStart();
   external void gameplayStop();
   external _Settings get settings;
+  external void addSettingsChangeListener(JSFunction listener);
 }
 
 extension type _Settings._(JSObject _) implements JSObject {

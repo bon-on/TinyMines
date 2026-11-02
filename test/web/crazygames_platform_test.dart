@@ -11,7 +11,11 @@ import 'package:tiny_mines/platform/crazygames_platform.dart';
 
 /// Installs a fake `window.CrazyGames.SDK` and records the calls it receives.
 class _FakeSdk {
-  _FakeSdk({this.environment = 'local', this.initResult}) {
+  _FakeSdk({
+    this.environment = 'local',
+    this.initResult,
+    bool withListener = false,
+  }) {
     settings.setProperty('muteAudio'.toJS, false.toJS);
     final game = JSObject()
       ..setProperty('settings'.toJS, settings)
@@ -23,6 +27,12 @@ class _FakeSdk {
         'gameplayStop'.toJS,
         (() => calls.add('gameplayStop')).toJS,
       );
+    if (withListener) {
+      game.setProperty(
+        'addSettingsChangeListener'.toJS,
+        ((JSFunction listener) => listeners.add(listener)).toJS,
+      );
+    }
     final sdk = JSObject()
       ..setProperty('environment'.toJS, environment.toJS)
       ..setProperty('game'.toJS, game)
@@ -44,6 +54,13 @@ class _FakeSdk {
       settings.setProperty('muteAudio'.toJS, value.toJS);
 
   final List<String> calls = <String>[];
+  final List<JSFunction> listeners = <JSFunction>[];
+
+  void fireSettingsChanged() {
+    for (final listener in listeners) {
+      listener.callAsFunction(null, settings);
+    }
+  }
 }
 
 void _removeSdk() => globalContext.delete('CrazyGames'.toJS);
@@ -111,5 +128,28 @@ void main() {
     expect(platform.isAudioMuted, isTrue);
     sdk.muteAudio = false;
     expect(platform.isAudioMuted, isFalse);
+  });
+
+  test('settings changes notify the mute listener', () async {
+    final sdk = _FakeSdk(withListener: true);
+    final platform = CrazyGamesPlatform();
+    await platform.initialize();
+    var notified = 0;
+    platform.setAudioMuteListener(() => notified++);
+    sdk.muteAudio = true;
+    sdk.fireSettingsChanged();
+    expect(notified, 1);
+    expect(platform.isAudioMuted, isTrue);
+    platform.setAudioMuteListener(null);
+    sdk.fireSettingsChanged();
+    expect(notified, 1);
+  });
+
+  test('an SDK without the settings listener still works', () async {
+    final sdk = _FakeSdk();
+    final platform = CrazyGamesPlatform();
+    await platform.initialize();
+    platform.gameplayStart();
+    expect(sdk.calls, <String>['gameplayStart']);
   });
 }

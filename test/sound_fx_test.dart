@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:tiny_mines/how_to_play.dart';
 import 'package:tiny_mines/main.dart';
@@ -158,6 +159,98 @@ void main() {
     });
   });
 
+  group('music', () {
+    late _RecordingMusic music;
+    late _MutedPlatform platform;
+    SoundFx make({bool web = true}) {
+      music = _RecordingMusic();
+      platform = _MutedPlatform()..muted = false;
+      return SoundFx(
+        platform: platform,
+        player: _RecordingPlayer(),
+        music: music,
+        requiresUserInput: web,
+      );
+    }
+
+    test('web waits for the first user input', () async {
+      final fx = make();
+      fx.startMusic();
+      await pumpEventQueue();
+      expect(music.log, isEmpty);
+      fx.onUserInput();
+      await pumpEventQueue();
+      expect(music.log, ['start ${SoundFx.musicAsset}']);
+      expect(fx.isMusicPlaying, isTrue);
+    });
+
+    test('native starts at once; mute, hidden tab and stop hold it', () async {
+      final fx = make(web: false);
+      fx.startMusic();
+      await pumpEventQueue();
+      expect(music.log, ['start ${SoundFx.musicAsset}']);
+
+      await fx.setUserMuted(true);
+      await pumpEventQueue();
+      expect(music.log.last, 'pause');
+      await fx.setUserMuted(false);
+      await pumpEventQueue();
+      expect(music.log.last, 'resume');
+
+      fx.setAppVisible(false);
+      expect(music.log.last, 'pause');
+      fx.setAppVisible(true);
+      await pumpEventQueue();
+      expect(music.log.last, 'resume');
+
+      platform.muted = true;
+      fx.refreshMute();
+      expect(music.log.last, 'pause');
+      platform.muted = false;
+      fx.refreshMute();
+      await pumpEventQueue();
+      expect(music.log.last, 'resume');
+
+      fx.stopMusic();
+      expect(music.log.last, 'stop');
+      expect(fx.isMusicPlaying, isFalse);
+      fx.dispose();
+    });
+
+    test('a refused start is retried on the next input', () async {
+      final fx = make();
+      music.refuse = true;
+      fx.startMusic();
+      fx.onUserInput();
+      await pumpEventQueue();
+      expect(fx.isMusicPlaying, isFalse);
+      music.refuse = false;
+      fx.onUserInput();
+      await pumpEventQueue();
+      expect(fx.isMusicPlaying, isTrue);
+    });
+
+    test('dispose stops the loop and later calls are harmless', () async {
+      final fx = make(web: false);
+      fx.startMusic();
+      await pumpEventQueue();
+      fx.dispose();
+      expect(music.log.last, 'stop');
+      fx.startMusic();
+      await pumpEventQueue();
+      expect(music.log.last, 'stop');
+    });
+
+    test('the platform music player tolerates a missing channel', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final player = PlatformMusicPlayer();
+      expect(await player.start(SoundFx.musicAsset, 0.4), isFalse);
+      player.pause();
+      expect(await player.resume(), isFalse);
+      player.stop();
+    });
+  });
+
   group('assets', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
@@ -183,12 +276,22 @@ void main() {
           ).allMatches(entity.readAsStringSync()).map((m) => m.group(0)!),
         );
       }
-      // Only the Sfx.asset template exists in code; the list comes from the enum.
-      expect(used, isEmpty);
+      // Effects come from the Sfx.asset template; the music loop is the only
+      // literal asset path in code.
+      expect(used, {SoundFx.musicAsset});
       final onDisk = Directory(
         'assets/audio',
       ).listSync().map((e) => e.path).where((p) => p.endsWith('.wav')).toSet();
-      expect(onDisk, Sfx.values.map((s) => s.asset).toSet());
+      expect(onDisk, {...Sfx.values.map((s) => s.asset), SoundFx.musicAsset});
+    });
+
+    test('music loop is 16 kHz mono 16-bit and under 1 MB', () {
+      final bytes = File(SoundFx.musicAsset).readAsBytesSync();
+      expect(bytes.length, lessThan(1024 * 1024));
+      final header = ByteData.sublistView(bytes, 0, 44);
+      expect(header.getUint16(22, Endian.little), 1, reason: 'mono');
+      expect(header.getUint32(24, Endian.little), 16000);
+      expect(header.getUint16(34, Endian.little), 16);
     });
   });
 
@@ -418,6 +521,30 @@ void main() {
       expect(fx.userMuted, isFalse);
     });
   });
+}
+
+class _RecordingMusic implements MusicPlayer {
+  final List<String> log = <String>[];
+  bool refuse = false;
+
+  @override
+  Future<bool> start(String asset, double volume) async {
+    if (refuse) return false;
+    log.add('start $asset');
+    return true;
+  }
+
+  @override
+  void pause() => log.add('pause');
+
+  @override
+  Future<bool> resume() async {
+    log.add('resume');
+    return true;
+  }
+
+  @override
+  void stop() => log.add('stop');
 }
 
 class _ThrowingPlayer implements SoundPlayer {
