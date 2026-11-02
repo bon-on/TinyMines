@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'src/art/garden_palette.dart';
+import 'src/art/garden_tile_art.dart';
+import 'src/ui/garden_ui.dart';
+
 /// Remembers whether the first-run tutorial was already shown.
 /// Storage failures never break play: unreadable means "not seen" and a failed
 /// write is ignored.
@@ -28,10 +32,17 @@ class TutorialStore {
 }
 
 class TutorialStep {
-  const TutorialStep(this.icon, this.text);
+  const TutorialStep(this.icon, this.text, {this.art, this.nearby = 0});
 
+  /// Shown when there is no [art].
   final IconData icon;
   final String text;
+
+  /// Garden tile illustration for the step.
+  final TileLook? art;
+
+  /// Pebble number for a [TileLook.soil] illustration.
+  final int nearby;
 }
 
 /// Modal "How to play" card shown over a dimmed game. Swallows pointer and
@@ -41,10 +52,12 @@ class HowToPlayOverlay extends StatefulWidget {
     super.key,
     required this.steps,
     required this.onClose,
+    this.palette = GardenPalette.spring,
   });
 
   final List<TutorialStep> steps;
   final VoidCallback onClose;
+  final GardenPalette palette;
 
   @override
   State<HowToPlayOverlay> createState() => _HowToPlayOverlayState();
@@ -126,78 +139,110 @@ class _HowToPlayOverlayState extends State<HowToPlayOverlay> {
   @override
   Widget build(BuildContext context) {
     final step = widget.steps[_step];
-    final scheme = Theme.of(context).colorScheme;
+    final palette = widget.palette;
+    final art = step.art;
     return Focus(
       focusNode: _focus,
       autofocus: true,
       onKeyEvent: _onKey,
       child: Stack(
         children: [
-          const ModalBarrier(color: Color(0xB3000000), dismissible: false),
+          const ModalBarrier(color: Color(0x99101A14), dismissible: false),
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 360),
                 child: Material(
-                  color: const Color(0xFF1B2023),
-                  borderRadius: BorderRadius.circular(16),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'How to play',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
+                  type: MaterialType.transparency,
+                  child: GardenPanel(
+                    palette: palette,
+                    radius: 26,
+                    padding: EdgeInsets.zero,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'How to play',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: palette.textPrimary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Icon(step.icon, size: 48, color: scheme.primary),
-                        const SizedBox(height: 12),
-                        Text(
-                          step.text,
-                          key: const ValueKey('how-to-play-text'),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 15, height: 1.35),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (var i = 0; i < widget.steps.length; i++)
-                              Container(
-                                width: 8,
-                                height: 8,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 3,
+                          const SizedBox(height: 14),
+                          if (art != null)
+                            TileArt(
+                              palette: palette,
+                              look: art,
+                              nearby: step.nearby,
+                              size: 64,
+                            )
+                          else
+                            Icon(
+                              step.icon,
+                              size: 52,
+                              color: palette.flowerCenter,
+                            ),
+                          const SizedBox(height: 12),
+                          Text(
+                            step.text,
+                            key: const ValueKey('how-to-play-text'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.35,
+                              fontWeight: FontWeight.w600,
+                              color: palette.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              for (var i = 0; i < widget.steps.length; i++)
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  width: i == _step ? 18 : 8,
+                                  height: 8,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(4),
+                                    color: i == _step
+                                        ? palette.accent
+                                        : palette.panelBorder,
+                                  ),
                                 ),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: i == _step
-                                      ? scheme.primary
-                                      : const Color(0xFF4A5560),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              TextButton(
+                                onPressed: widget.onClose,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: palette.textSecondary,
+                                ),
+                                child: const Text(
+                                  'Skip',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            TextButton(
-                              onPressed: widget.onClose,
-                              child: const Text('Skip'),
-                            ),
-                            const Spacer(),
-                            FilledButton(
-                              onPressed: _next,
-                              child: Text(_last ? 'Play' : 'Next'),
-                            ),
-                          ],
-                        ),
-                      ],
+                              const Spacer(),
+                              GardenButton(
+                                palette: palette,
+                                label: _last ? 'Play' : 'Next',
+                                height: 44,
+                                onPressed: _next,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

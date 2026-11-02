@@ -4,12 +4,24 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'best_times.dart';
 import 'how_to_play.dart';
 import 'mine_field.dart';
 import 'platform/game_platform.dart';
 import 'result_registration.dart';
+import 'src/art/garden_palette.dart';
+import 'src/art/garden_scenery.dart';
+import 'src/art/garden_tile_art.dart';
 import 'src/audio/sound_fx.dart';
+import 'src/game/difficulty.dart';
+import 'src/meta/daily_challenge.dart';
+import 'src/meta/garden_progress.dart';
+import 'src/meta/garden_progress_store.dart';
+import 'src/meta/garden_theme.dart';
+import 'src/ui/board_fx.dart';
+import 'src/ui/garden_board.dart';
+import 'src/ui/garden_cards.dart';
+import 'src/ui/garden_ui.dart';
+import 'src/ui/run_summary_overlay.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,11 +55,11 @@ class TinyMinesApp extends StatelessWidget {
       title: 'Tiny Mines',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF101214),
+        brightness: Brightness.light,
+        fontFamily: 'Roboto',
+        scaffoldBackgroundColor: GardenPalette.spring.skyBottom,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF8AA39B),
-          brightness: Brightness.dark,
+          seedColor: GardenPalette.spring.accent,
         ),
         useMaterial3: true,
       ),
@@ -62,15 +74,18 @@ const int _hintPenaltySeconds = 10;
 const List<TutorialStep> _tutorialSteps = [
   TutorialStep(
     Icons.grid_view,
-    'Clear every safe tile without hitting a mine. A number counts the mines around it.',
+    'Dig up every safe patch without waking a mole. A pebble counts the moles around it.',
+    art: TileLook.soil,
+    nearby: 2,
   ),
   TutorialStep(
     Icons.flag,
-    'Tap or click to reveal. Long press or right-click to flag a mine.',
+    'Tap or click to dig. Long press or right-click to plant a flag on a mole.',
+    art: TileLook.flagged,
   ),
   TutorialStep(
     Icons.lightbulb,
-    'Tap a number with all its flags placed to clear the rest. Hints cost +${_hintPenaltySeconds}s.',
+    'Tap a pebble with all its flags placed to dig the rest. Hints cost +${_hintPenaltySeconds}s.',
   ),
 ];
 
@@ -78,14 +93,15 @@ class TinyMinesScreen extends StatefulWidget {
   const TinyMinesScreen({
     super.key,
     this.random,
-    this.bestTimes = const BestTimes(),
+    this.progressStore = const GardenProgressStore(),
     this.tutorialStore = const TutorialStore(),
     this.platform = const NoopGamePlatform(),
     this.stopwatch,
     this.soundFx,
+    this.now,
   });
 
-  /// Sound effects and mute switch; defaults to the real player.
+  /// Sound effects, music and mute switch; defaults to the real player.
   final SoundFx? soundFx;
 
   /// Clock for the solve time; tests can inject a controllable one.
@@ -97,28 +113,30 @@ class TinyMinesScreen extends StatefulWidget {
   /// Mine placement source; tests pass a seeded generator.
   final math.Random? random;
 
-  /// Local best-time storage; tests can substitute mock preferences.
-  final BestTimes bestTimes;
+  /// Saved progress (best times, XP, theme, daily); tests use a memory one.
+  final GardenProgressStore progressStore;
 
   /// First-run tutorial flag storage; tests can substitute a fake.
   final TutorialStore tutorialStore;
+
+  /// Wall clock for the daily board; tests pin a date.
+  final DateTime Function()? now;
 
   @override
   State<TinyMinesScreen> createState() => _TinyMinesScreenState();
 }
 
 class _TinyMinesScreenState extends State<TinyMinesScreen> {
-  _Difficulty _difficulty = _Difficulty.easy;
+  Difficulty _difficulty = Difficulty.easy;
   late MineField _field;
   int _moves = 0;
-  // Elapsed time is measured by a stopwatch (paused while the tutorial is
+  // Elapsed time is measured by a stopwatch (paused while an overlay is
   // open) so brief pauses never discard partial seconds; the periodic timer
   // only repaints the clock.
   late final Stopwatch _clock = widget.stopwatch ?? Stopwatch();
   int _hintPenalty = 0;
   int get _elapsedSeconds => _clock.elapsedMilliseconds ~/ 1000 + _hintPenalty;
   int _hints = 3;
-  final Map<_Difficulty, int?> _bests = {};
   Timer? _timer;
   bool _tutorialOpen = false;
   int _tutorialSession = 0;
@@ -127,18 +145,89 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   bool _gameplayActive = false;
   late final SoundFx _sound =
       widget.soundFx ?? SoundFx(platform: widget.platform);
+  late final AppLifecycleListener _lifecycle;
+  final BoardFx _fx = BoardFx();
+
+  /// The player made a move on this board (the clock runs from then).
+  bool _runStarted = false;
+
+  /// Daily board in play: its day key; null for a regular board.
+  String? _dailyDay;
+
+  /// The mole that ended the run, drawn startled.
+  int? _hitIndex;
+
+  /// A board tap made while the tutorial check was pending:
+  /// (cell, isFlag). Applied once the check answers "seen".
+  (int, bool)? _pendingTap;
+
+  GardenProgress _progress = const GardenProgress.initial();
+  bool _progressLoaded = false;
+  // Runs finished (or themes picked) before the stored progress loaded; they
+  // are merged into it once it arrives so nothing is overwritten.
+  final List<RunResult> _pendingRuns = <RunResult>[];
+  bool _themeTouched = false;
+
+  RunReport? _report;
+  bool _summaryOpen = false;
+  bool _gardenOpen = false;
 
   bool get _lost => _field.lost;
   bool get _won => _field.won;
+  bool get _over => _lost || _won;
+  GardenPalette get _palette => GardenPalette.of(_progress.selectedTheme);
+  DateTime get _today => (widget.now ?? DateTime.now)();
 
   @override
   void initState() {
     super.initState();
     _sound.addListener(_onSoundChanged);
     if (widget.soundFx == null) _sound.load();
+    _lifecycle = AppLifecycleListener(
+      onStateChange: (state) => _sound.setAppVisible(
+        state == AppLifecycleState.resumed ||
+            state == AppLifecycleState.inactive,
+      ),
+    );
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
+    widget.platform.setAudioMuteListener(_sound.refreshMute);
+    _sound.startMusic();
     _restart();
-    _loadBest(_difficulty);
+    unawaited(_loadProgress());
     _maybeShowTutorial();
+  }
+
+  Future<void> _loadProgress() async {
+    GardenProgress loaded;
+    try {
+      loaded = await widget.progressStore.load();
+    } catch (_) {
+      loaded = const GardenProgress.initial();
+    }
+    if (!mounted) return;
+    final dirty = _pendingRuns.isNotEmpty || _themeTouched;
+    var merged = loaded;
+    for (final run in _pendingRuns) {
+      merged = merged.applyRun(run).progress;
+    }
+    if (_themeTouched) merged = merged.withTheme(_progress.selectedTheme);
+    _pendingRuns.clear();
+    setState(() {
+      _progress = merged;
+      _progressLoaded = true;
+    });
+    if (dirty) unawaited(_saveProgress());
+  }
+
+  Future<void> _saveProgress() async {
+    try {
+      await widget.progressStore.save(_progress);
+    } catch (_) {}
+  }
+
+  bool _onHardwareKey(KeyEvent event) {
+    _sound.onUserInput();
+    return false;
   }
 
   Future<void> _maybeShowTutorial() async {
@@ -148,21 +237,39 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       seen = await widget.tutorialStore.hasSeen();
     } catch (_) {}
     if (!mounted) return;
-    // Rebuild so the pointer gate in build() lifts even if nothing else does.
+    // Rebuild so the control gate in build() lifts even if nothing else does.
     setState(() => _tutorialChecked = true);
     // Ignore a stale answer if the player already opened it via "?".
     if (seen || session != _tutorialSession) {
       _syncGameplay();
+      _applyPendingTap();
       return;
     }
+    _pendingTap = null;
     _openTutorial();
   }
 
+  /// A returning player may tap the board before the first-run check has
+  /// answered; that tap used to be dropped silently ("first click ignored").
+  void _applyPendingTap() {
+    final pending = _pendingTap;
+    _pendingTap = null;
+    if (pending == null || _tutorialOpen) return;
+    final (index, flag) = pending;
+    if (flag) {
+      _toggleFlag(index);
+    } else {
+      _tapCell(index);
+    }
+  }
+
+  bool get _overlayOpen => _tutorialOpen || _gardenOpen;
+
   /// Reports gameplay start/stop to the platform exactly on transitions:
-  /// running only after the tutorial check, while no tutorial is open and the
+  /// running only after the tutorial check, while no overlay is open and the
   /// field is not finished.
   void _syncGameplay() {
-    final wantActive = _tutorialChecked && !_tutorialOpen && !_lost && !_won;
+    final wantActive = _tutorialChecked && !_overlayOpen && !_over;
     if (wantActive == _gameplayActive) return;
     _gameplayActive = wantActive;
     try {
@@ -185,8 +292,25 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (!_tutorialOpen) return;
     setState(() => _tutorialOpen = false);
     _syncGameplay();
-    if (_field.armed && !_lost && !_won) _startTimer();
+    _resumeClock();
     widget.tutorialStore.markSeen();
+  }
+
+  void _openGarden() {
+    _stopTimer();
+    setState(() => _gardenOpen = true);
+    _syncGameplay();
+  }
+
+  void _closeGarden() {
+    if (!_gardenOpen) return;
+    setState(() => _gardenOpen = false);
+    _syncGameplay();
+    _resumeClock();
+  }
+
+  void _resumeClock() {
+    if (_runStarted && !_over && !_overlayOpen) _startTimer();
   }
 
   void _onSoundChanged() {
@@ -195,36 +319,58 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
+    widget.platform.setAudioMuteListener(null);
+    _lifecycle.dispose();
     _sound.removeListener(_onSoundChanged);
+    _sound.stopMusic();
     if (widget.soundFx == null) _sound.dispose();
     _timer?.cancel();
+    _fx.dispose();
     super.dispose();
   }
 
-  Future<void> _loadBest(_Difficulty difficulty) async {
-    final best = await widget.bestTimes.load(difficulty.name);
-    if (!mounted) return;
-    setState(() => _bests[difficulty] = best);
-  }
-
-  Future<void> _recordBest(_Difficulty difficulty, int seconds) async {
-    if (await widget.bestTimes.record(difficulty.name, seconds)) {
-      if (!mounted) return;
-      setState(() => _bests[difficulty] = seconds);
-    }
-  }
-
-  void _restart() {
+  void _resetRunState() {
     _stopTimer();
     _clock.reset();
     _hintPenalty = 0;
+    _moves = 0;
+    _runStarted = false;
+    _hitIndex = null;
+    _report = null;
+    _summaryOpen = false;
+    _fx.clear();
+  }
+
+  /// New regular board at the current difficulty (leaves the daily board).
+  void _restart() {
+    _resetRunState();
+    _dailyDay = null;
     _field = MineField(
       size: _difficulty.size,
       mineCount: _difficulty.mines,
       random: widget.random,
     );
-    _moves = 0;
     _hints = _difficulty.hints;
+    setState(() {});
+    _syncGameplay();
+  }
+
+  void _startDaily() {
+    final today = _today;
+    if (_progress.dailyResult(today) != null) return;
+    _resetRunState();
+    _gardenOpen = false;
+    final (field, start) = DailyChallenge.build(today);
+    _field = field;
+    _dailyDay = DailyChallenge.dayKey(today);
+    _hints = DailyChallenge.difficulty.hints;
+    _fx.reveal(
+      _wave(start, [
+        for (var i = 0; i < field.cells.length; i++)
+          if (field.cells[i].revealed) i,
+      ]),
+    );
     setState(() {});
     _syncGameplay();
   }
@@ -233,7 +379,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _clock.start();
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-      if (!mounted || _lost || _won) return;
+      if (!mounted || _over) return;
       setState(() {});
     });
   }
@@ -244,19 +390,49 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _timer = null;
   }
 
+  Difficulty get _boardDifficulty =>
+      _dailyDay != null ? DailyChallenge.difficulty : _difficulty;
+
+  List<bool> _revealedSnapshot() => [
+    for (final cell in _field.cells) cell.revealed,
+  ];
+
+  int _distance(int a, int b) {
+    final size = _field.size;
+    return math.max((a ~/ size - b ~/ size).abs(), (a % size - b % size).abs());
+  }
+
+  /// Cells with delays rippling out from [origin].
+  List<TimedCell> _wave(int origin, Iterable<int> cells, {int stepMs = 34}) {
+    final list = cells.toList();
+    if (list.isEmpty) return const [];
+    final far = list.map((c) => _distance(origin, c)).reduce(math.max);
+    final step = far == 0 ? 0 : math.min(stepMs, 620 ~/ far);
+    return [
+      for (final c in list) (cell: c, delayMs: _distance(origin, c) * step),
+    ];
+  }
+
   void _tapCell(int index) {
-    if (_lost || _won) return;
-    final wasArmed = _field.armed;
+    if (!_tutorialChecked) {
+      _pendingTap = (index, false);
+      return;
+    }
+    if (_over) return;
+    final before = _revealedSnapshot();
     final outcome = _field.cells[index].revealed
         ? _field.chord(index)
         : _field.reveal(index);
     if (outcome == RevealOutcome.none) return;
-    if (!wasArmed) _startTimer();
+    if (!_runStarted) {
+      _runStarted = true;
+      _startTimer();
+    }
     _moves++;
-    _afterReveal();
+    _afterReveal(index, before);
   }
 
-  void _afterReveal() {
+  void _afterReveal(int origin, List<bool> before) {
     _sound.play(
       _lost
           ? Sfx.boom
@@ -264,37 +440,134 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           ? Sfx.win
           : Sfx.reveal,
     );
-    if (_lost || _won) _stopTimer();
+    if (_over) _stopTimer();
+    final dug = [
+      for (var i = 0; i < _field.cells.length; i++)
+        if (_field.cells[i].revealed && !before[i] && !_field.cells[i].mine) i,
+    ];
+    if (_lost) {
+      _hitIndex = _findHit(origin);
+      final hit = _hitIndex ?? origin;
+      _fx.reveal(_wave(origin, dug));
+      _fx.blast(hit, [
+        for (var i = 0; i < _field.cells.length; i++)
+          if (_field.cells[i].mine && i != hit && !_field.cells[i].flagged)
+            (cell: i, delayMs: 260 + math.min(1100, _distance(hit, i) * 90)),
+      ]);
+    } else {
+      _fx.reveal(_wave(origin, dug));
+      if (_won) {
+        _fx.bloom([
+          for (var i = 0; i < _field.cells.length; i++)
+            if (_field.cells[i].mine)
+              (
+                cell: i,
+                delayMs: 200 + math.min(900, _distance(origin, i) * 70),
+              ),
+        ]);
+      }
+    }
     setState(() {});
     _syncGameplay();
-    if (_won) {
-      _recordBest(_difficulty, _elapsedSeconds);
-      if (!widget.platform.allowsResultRegistration) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          offerResultRegistration(
-            context,
-            gameId: 'tiny-mines',
-            metric: 'time',
-            value: _elapsedSeconds,
-            displayValue: _formatTime(_elapsedSeconds),
-          );
-        }
-      });
+    if (_over) _finishRun();
+  }
+
+  /// The mole that was dug: the tapped cell, or for a chord the unflagged
+  /// mine around it.
+  int? _findHit(int origin) {
+    if (_field.cells[origin].mine) return origin;
+    for (final n in _field.neighbors(origin)) {
+      if (_field.cells[n].mine && !_field.cells[n].flagged) return n;
+    }
+    return null;
+  }
+
+  void _finishRun() {
+    final won = _won;
+    final seconds = _elapsedSeconds;
+    final safe = _field.cells.where((c) => !c.mine).length;
+    final dug = _field.cells.where((c) => !c.mine && c.revealed).length;
+    final run = RunResult(
+      difficulty: _boardDifficulty,
+      won: won,
+      seconds: seconds,
+      revealedFraction: safe == 0 ? 1 : dug / safe,
+      dailyDay: _dailyDay,
+    );
+    final outcome = _progress.applyRun(run);
+    _progress = outcome.progress;
+    if (_progressLoaded) {
+      unawaited(_saveProgress());
+    } else {
+      // Saving now could overwrite the stored value; merge after loading.
+      _pendingRuns.add(run);
+    }
+    setState(() {
+      _report = RunReport(
+        won: won,
+        difficulty: _boardDifficulty,
+        seconds: seconds,
+        daily: _dailyDay != null,
+        outcome: outcome,
+      );
+      _summaryOpen = true;
+    });
+    if (!won ||
+        _dailyDay != null ||
+        !widget.platform.allowsResultRegistration) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        offerResultRegistration(
+          context,
+          gameId: 'tiny-mines',
+          metric: 'time',
+          value: seconds,
+          displayValue: formatTime(seconds),
+        );
+      }
+    });
+  }
+
+  void _onSummaryShown() {
+    final outcome = _report?.outcome;
+    if (outcome == null) return;
+    if (outcome.leveledUp) {
+      _sound.play(Sfx.levelUp);
+    } else if (outcome.isNewBest) {
+      _sound.play(Sfx.newBest);
+    } else if (outcome.dailyRecorded) {
+      _sound.play(Sfx.daily);
     }
   }
 
   void _toggleFlag(int index) {
+    if (!_tutorialChecked) {
+      _pendingTap = (index, true);
+      return;
+    }
     if (!_field.toggleFlag(index)) return;
     _sound.play(Sfx.flag);
+    _fx.flag(index, planted: _field.cells[index].flagged);
     setState(() {});
   }
 
-  void _selectDifficulty(_Difficulty difficulty) {
-    if (_difficulty == difficulty) return;
+  void _selectDifficulty(Difficulty difficulty) {
+    if (_difficulty == difficulty && _dailyDay == null) return;
     _difficulty = difficulty;
     _restart();
-    _loadBest(difficulty);
+  }
+
+  void _selectTheme(GardenTheme theme) {
+    final next = _progress.withTheme(theme);
+    if (identical(next, _progress)) return;
+    setState(() => _progress = next);
+    if (_progressLoaded) {
+      unawaited(_saveProgress());
+    } else {
+      _themeTouched = true;
+    }
   }
 
   void _useHint() {
@@ -303,34 +576,78 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (candidate == null) return;
     _hints--;
     _hintPenalty += _hintPenaltySeconds;
+    if (!_runStarted) {
+      _runStarted = true;
+      _startTimer();
+    }
+    final before = _revealedSnapshot();
     _field.reveal(candidate);
-    _afterReveal();
+    _fx.sparkle(candidate);
+    _afterReveal(candidate, before);
+  }
+
+  void _playNext() {
+    final next = _report?.difficulty.next;
+    if (next == null) return;
+    _difficulty = next;
+    _restart();
+  }
+
+  void _closeSummary() => setState(() => _summaryOpen = false);
+
+  String get _status {
+    if (_lost) return 'You dug up a mole! Try a cleaner dig.';
+    if (_won) return 'Field cleared in ${formatTime(_elapsedSeconds)}.';
+    if (_dailyDay != null) {
+      return 'Daily garden for ${formatDay(_today)}: one try, same board for everyone.';
+    }
+    return 'Tap to dig. Long press or right-click to flag. Tap a pebble to clear around it.';
   }
 
   @override
   Widget build(BuildContext context) {
-    final wrongFlags = _field.wrongFlags.toSet();
-    final status = _lost
-        ? 'Mine hit. Try a cleaner sweep.'
-        : _won
-        ? 'Field cleared in ${_formatTime(_elapsedSeconds)}.'
-        : 'Tap to reveal. Long press or right-click to flag. Tap a number to clear around it.';
+    final palette = _palette;
+    final report = _report;
     return Stack(
       children: [
-        // Taps are ignored until the first-run check has answered, so the
-        // tutorial cannot open on top of a half-started game.
-        AbsorbPointer(
-          absorbing: !_tutorialChecked,
-          // Keep keyboard focus (Tab, Enter) out of the game under the card.
-          child: ExcludeFocus(
-            excluding: _tutorialOpen || !_tutorialChecked,
-            child: _buildGame(context, wrongFlags, status),
-          ),
+        // Keep keyboard focus (Tab, Enter) out of the game under a card.
+        ExcludeFocus(
+          excluding: _overlayOpen || _summaryOpen || !_tutorialChecked,
+          child: _buildGame(context, palette),
         ),
+        if (report != null && _summaryOpen)
+          Positioned.fill(
+            child: RunSummaryOverlay(
+              key: ValueKey(report),
+              report: report,
+              palette: palette,
+              delay: Duration(milliseconds: report.won ? 950 : 800),
+              onPlayAgain: _restart,
+              onClose: _closeSummary,
+              onShown: _onSummaryShown,
+              onNext:
+                  report.won && !report.daily && report.difficulty.next != null
+                  ? _playNext
+                  : null,
+            ),
+          ),
+        if (_gardenOpen)
+          Positioned.fill(
+            child: GardenOverlay(
+              palette: palette,
+              progress: _progress,
+              today: _today,
+              dailyPlaying: _dailyDay != null && !_over,
+              onSelectTheme: _selectTheme,
+              onPlayDaily: _startDaily,
+              onClose: _closeGarden,
+            ),
+          ),
         if (_tutorialOpen)
           Positioned.fill(
             child: HowToPlayOverlay(
               steps: _tutorialSteps,
+              palette: palette,
               onClose: _closeTutorial,
             ),
           ),
@@ -338,389 +655,466 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
-  Widget _buildGame(BuildContext context, Set<int> wrongFlags, String status) {
+  /// Controls are ignored until the first-run check has answered, so the
+  /// tutorial cannot open on top of a half-started game. (The board keeps
+  /// its own gate: it remembers a tap instead of dropping it.)
+  Widget _gate(Widget child) =>
+      AbsorbPointer(absorbing: !_tutorialChecked, child: child);
+
+  Widget _buildGame(BuildContext context, GardenPalette palette) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: Column(
-                children: [
-                  _Header(
-                    flags: _field.flags,
-                    hints: _hints,
-                    seconds: _elapsedSeconds,
-                    moves: _moves,
-                    best: _bests[_difficulty],
-                    mines: _difficulty.mines,
-                    onRestart: _restart,
-                    onHelp: _openTutorial,
-                    soundMuted: _sound.userMuted,
-                    onToggleSound: _sound.toggle,
-                    onHint: _field.armed && !_lost && !_won && _hints > 0
-                        ? _useHint
-                        : null,
-                  ),
-                  const SizedBox(height: 10),
-                  _DifficultyPicker(
-                    difficulty: _difficulty,
-                    onChanged: _selectDifficulty,
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final boardSize = math.min(
-                          constraints.maxWidth,
-                          constraints.maxHeight,
-                        );
-                        return Center(
-                          child: SizedBox.square(
-                            dimension: boardSize,
-                            child: GridView.builder(
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _field.cells.length,
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: _difficulty.size,
-                                    crossAxisSpacing: _difficulty.gap,
-                                    mainAxisSpacing: _difficulty.gap,
-                                  ),
-                              itemBuilder: (context, index) {
-                                return _MineTile(
-                                  cell: _field.cells[index],
-                                  gameOver: _lost || _won,
-                                  wrongFlag: wrongFlags.contains(index),
-                                  onTap: () => _tapCell(index),
-                                  onFlag: () => _toggleFlag(index),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    status,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFFD1D9E0),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (_lost || _won) ...[
-                    const SizedBox(height: 8),
-                    FilledButton.icon(
-                      onPressed: _restart,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('New Field'),
-                    ),
-                  ],
-                ],
+      backgroundColor: palette.skyBottom,
+      body: Listener(
+        onPointerDown: (_) => _sound.onUserInput(),
+        child: Stack(
+          children: [
+            Positioned.fill(child: GardenScenery(palette: palette)),
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final wide =
+                      box.maxWidth >= 760 &&
+                      box.maxWidth / box.maxHeight >= 1.25;
+                  return wide
+                      ? _wideLayout(palette, box)
+                      : _narrowLayout(palette);
+                },
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
-}
 
-enum _Difficulty {
-  easy('Easy', 6, 5, 3),
-  normal('Normal', 9, 12, 3),
-  hard('Hard', 12, 26, 4);
-
-  const _Difficulty(this.label, this.size, this.mines, this.hints);
-
-  final String label;
-  final int size;
-  final int mines;
-  final int hints;
-
-  double get gap => size > 10 ? 3 : 4;
-}
-
-class _DifficultyPicker extends StatelessWidget {
-  const _DifficultyPicker({required this.difficulty, required this.onChanged});
-
-  final _Difficulty difficulty;
-  final ValueChanged<_Difficulty> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SegmentedButton<_Difficulty>(
-      segments: [
-        for (final option in _Difficulty.values)
-          ButtonSegment<_Difficulty>(
-            value: option,
-            label: Text('${option.label} ${option.size}x${option.size}'),
-          ),
-      ],
-      selected: {difficulty},
-      onSelectionChanged: (selected) => onChanged(selected.first),
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const Color(0xFF34413D);
-          }
-          return const Color(0xFF181C1F);
-        }),
-        foregroundColor: WidgetStateProperty.all(const Color(0xFFE4ECE8)),
+  Widget _title(GardenPalette palette, {double size = 28}) {
+    // One line on narrow phones: scale the title down instead of wrapping.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Text(
+        'Tiny Mines',
+        maxLines: 1,
+        style: TextStyle(
+          fontSize: size,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.5,
+          color: palette.isNight
+              ? const Color(0xFFFFFFFF)
+              : palette.textPrimary,
+          shadows: [
+            Shadow(
+              color: palette.isNight
+                  ? const Color(0x99000000)
+                  : const Color(0xB3FFFFFF),
+              offset: const Offset(0, 2),
+              blurRadius: 0,
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.flags,
-    required this.hints,
-    required this.seconds,
-    required this.moves,
-    required this.best,
-    required this.mines,
-    required this.onRestart,
-    required this.onHelp,
-    required this.soundMuted,
-    required this.onToggleSound,
-    required this.onHint,
-  });
+  List<Widget> _toolButtons(GardenPalette palette) => [
+    GardenIconButton(
+      palette: palette,
+      icon: Icons.help_outline,
+      tooltip: 'How to play',
+      onPressed: _openTutorial,
+    ),
+    GardenIconButton(
+      palette: palette,
+      icon: _sound.userMuted
+          ? Icons.volume_off_rounded
+          : Icons.volume_up_rounded,
+      tooltip: _sound.userMuted ? 'Sound off' : 'Sound on',
+      onPressed: _sound.toggle,
+    ),
+    GardenIconButton(
+      palette: palette,
+      icon: Icons.lightbulb,
+      tooltip: 'Reveal one safe tile (+${_hintPenaltySeconds}s)',
+      badge: _hints,
+      onPressed: _field.armed && !_over && _hints > 0 ? _useHint : null,
+    ),
+    GardenIconButton(
+      palette: palette,
+      icon: Icons.refresh,
+      tooltip: 'Restart',
+      onPressed: _restart,
+    ),
+  ];
 
-  final int flags;
-  final int hints;
-  final int seconds;
-  final int moves;
-  final int? best;
-  final int mines;
-  final VoidCallback onRestart;
-  final VoidCallback onHelp;
-  final bool soundMuted;
-  final VoidCallback onToggleSound;
-  final VoidCallback? onHint;
+  String get _bestText {
+    if (_dailyDay != null) return '--';
+    final best = _progress.bestTime(_difficulty);
+    return best == null ? '--' : formatTime(best);
+  }
 
-  @override
-  Widget build(BuildContext context) {
+  List<(String, String)> get _stats => [
+    ('Mines', '${_boardDifficulty.mines}'),
+    ('Flags', '${_field.flags}'),
+    ('Time', formatTime(_elapsedSeconds)),
+    ('Moves', '$_moves'),
+    ('Best', _bestText),
+  ];
+
+  Widget _board(GardenPalette palette) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final dimension = math.min(
+          580.0,
+          math.min(box.maxWidth, box.maxHeight),
+        );
+        return Center(
+          child: GardenBoard(
+            field: _field,
+            palette: palette,
+            fx: _fx,
+            gap: _boardDifficulty.gap,
+            hitIndex: _hitIndex,
+            dimension: dimension,
+            onTap: _tapCell,
+            onFlag: _toggleFlag,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _statusArea(GardenPalette palette) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            // One line on narrow phones: scale the title down instead of
-            // wrapping it and pushing the board down.
-            const Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Tiny Mines',
-                  maxLines: 1,
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: palette.panel,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            _status,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _lost ? palette.danger : palette.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        if (_over && !_summaryOpen) ...[
+          const SizedBox(height: 8),
+          GardenButton(
+            palette: palette,
+            label: 'New Field',
+            icon: Icons.refresh,
+            height: 44,
+            onPressed: _restart,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _narrowLayout(GardenPalette palette) {
+    final tools = _toolButtons(palette);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Column(
+            children: [
+              _gate(
+                Row(
+                  children: [
+                    Expanded(child: _title(palette, size: 26)),
+                    for (final button in tools) ...[
+                      const SizedBox(width: 6),
+                      button,
+                    ],
+                  ],
                 ),
               ),
-            ),
-            IconButton(
-              onPressed: onHelp,
-              tooltip: 'How to play',
-              icon: const Icon(Icons.help_outline),
-            ),
-            IconButton(
-              onPressed: onToggleSound,
-              tooltip: soundMuted ? 'Sound off' : 'Sound on',
-              icon: Icon(
-                soundMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              const SizedBox(height: 8),
+              _gate(
+                GardenPanel(
+                  palette: palette,
+                  radius: 16,
+                  padding: const EdgeInsets.all(5),
+                  child: Row(
+                    children: [
+                      for (final (label, value) in _stats) ...[
+                        if (label != 'Mines') const SizedBox(width: 5),
+                        Expanded(
+                          child: StatTile(
+                            palette: palette,
+                            label: label,
+                            value: value,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: onHint,
-              tooltip: 'Reveal one safe tile (+${_hintPenaltySeconds}s)',
-              icon: Badge(
-                label: Text('$hints'),
-                isLabelVisible: hints > 0,
-                child: const Icon(Icons.lightbulb),
+              const SizedBox(height: 8),
+              _gate(
+                DifficultyPicker(
+                  palette: palette,
+                  selected: _dailyDay == null ? _difficulty : null,
+                  onChanged: _selectDifficulty,
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: onRestart,
-              tooltip: 'Restart',
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Expanded(child: _board(palette)),
+              const SizedBox(height: 8),
+              _statusArea(palette),
+              const SizedBox(height: 8),
+              _gate(_narrowFooter(palette)),
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: _Metric(label: 'Mines', value: '$mines'),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _Metric(label: 'Flags', value: '$flags'),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _Metric(label: 'Time', value: _formatTime(seconds)),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _Metric(label: 'Moves', value: '$moves'),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _Metric(
-                label: 'Best',
-                value: best == null ? '--' : _formatTime(best!),
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
-}
 
-String _formatTime(int seconds) {
-  final minutes = seconds ~/ 60;
-  final remaining = seconds % 60;
-  return '$minutes:${remaining.toString().padLeft(2, '0')}';
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B2023),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _narrowFooter(GardenPalette palette) {
+    final dailyDone = _progress.dailyResult(_today) != null;
+    return GardenPanel(
+      palette: palette,
+      radius: 16,
+      padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+      child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: Color(0xFF95A2AF)),
+          LevelBadge(palette: palette, level: _progress.level, size: 38),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${_progress.xpIntoLevel} / ${_progress.xpForNextLevel} XP',
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: palette.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                GardenProgressBar(
+                  palette: palette,
+                  value: _progress.xpIntoLevel / _progress.xpForNextLevel,
+                  height: 8,
+                ),
+              ],
+            ),
           ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(width: 8),
+          Flexible(
+            flex: 2,
+            child: GardenButton(
+              palette: palette,
+              label: dailyDone ? 'Daily done' : 'Daily',
+              icon: dailyDone
+                  ? Icons.check_rounded
+                  : Icons.calendar_today_rounded,
+              height: 40,
+              onPressed: dailyDone || _dailyDay != null ? null : _startDaily,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            flex: 2,
+            child: GardenButton(
+              palette: palette,
+              label: 'Garden',
+              icon: Icons.local_florist_rounded,
+              primary: false,
+              height: 40,
+              onPressed: _openGarden,
+            ),
+          ),
         ],
       ),
     );
   }
-}
 
-class _MineTile extends StatelessWidget {
-  const _MineTile({
-    required this.cell,
-    required this.gameOver,
-    required this.wrongFlag,
-    required this.onTap,
-    required this.onFlag,
-  });
-
-  final MineCell cell;
-  final bool gameOver;
-  final bool wrongFlag;
-  final VoidCallback onTap;
-  final VoidCallback onFlag;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = cell.revealed
-        ? cell.mine
-              ? Icons.close
-              : null
-        : cell.flagged
-        ? Icons.flag
-        : null;
-    final interactive = !cell.revealed || cell.nearby > 0;
-    return Material(
-      color: wrongFlag
-          ? const Color(0xFF4A2A2C)
-          : cell.revealed
-          ? const Color(0xFF252B2E)
-          : const Color(0xFF65756F),
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        mouseCursor: interactive && !gameOver
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.basic,
-        hoverColor: const Color(0x33FFFFFF),
-        onTap: onTap,
-        onLongPress: onFlag,
-        onSecondaryTap: onFlag,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            final side = math.min(box.maxWidth, box.maxHeight);
-            return Center(
-              child: wrongFlag
-                  ? Semantics(
-                      label: 'Wrong flag',
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            Icons.flag,
-                            color: const Color(0xFF95A2AF),
-                            size: side * 0.55,
-                          ),
-                          Icon(
-                            Icons.close,
-                            color: const Color(0xFFE5484D),
-                            size: side * 0.8,
-                          ),
-                        ],
-                      ),
-                    )
-                  : content != null
-                  ? Container(
-                      width: side * 0.68,
-                      height: side * 0.68,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFE5484D),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        content,
-                        color: const Color(0xFFFFFFFF),
-                        size: side * 0.45,
-                      ),
-                    )
-                  : Text(
-                      cell.revealed && cell.nearby > 0 ? '${cell.nearby}' : '',
-                      style: TextStyle(
-                        color: _numberColor(cell.nearby),
-                        fontSize: side * 0.55,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-            );
-          },
+  /// A side column that scales down instead of overflowing on short screens.
+  Widget _sideColumn(double width, List<Widget> children) {
+    return SizedBox(
+      width: width,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: width,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Color _numberColor(int nearby) {
-    return switch (nearby) {
-      1 => const Color(0xFF7DD3FC),
-      2 => const Color(0xFFA7F3D0),
-      3 => const Color(0xFFFDE68A),
-      4 => const Color(0xFFFCA5A5),
-      5 => const Color(0xFFF0ABFC),
-      6 => const Color(0xFF5EEAD4),
-      _ => Colors.white,
-    };
+  Widget _wideLayout(GardenPalette palette, BoxConstraints box) {
+    final side = (box.maxWidth * 0.235).clamp(210.0, 300.0);
+    final stats = _stats;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _gate(
+            _sideColumn(side, [
+              GardenPanel(
+                palette: palette,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _title(palette, size: 30),
+                    Text(
+                      'A cozy garden dig',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              GardenPanel(
+                palette: palette,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    LevelCard(palette: palette, progress: _progress),
+                    const SizedBox(height: 12),
+                    PanelCaption('Themes', palette: palette),
+                    const SizedBox(height: 6),
+                    ThemePicker(
+                      palette: palette,
+                      progress: _progress,
+                      onSelect: _selectTheme,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              GardenPanel(
+                palette: palette,
+                child: DailyCard(
+                  palette: palette,
+                  progress: _progress,
+                  today: _today,
+                  playing: _dailyDay != null && !_over,
+                  onPlay: _startDaily,
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              children: [
+                _gate(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: DifficultyPicker(
+                      palette: palette,
+                      selected: _dailyDay == null ? _difficulty : null,
+                      onChanged: _selectDifficulty,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(child: _board(palette)),
+                const SizedBox(height: 8),
+                _statusArea(palette),
+              ],
+            ),
+          ),
+          const SizedBox(width: 18),
+          _gate(
+            _sideColumn(side, [
+              GardenPanel(
+                palette: palette,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    StatTile(
+                      palette: palette,
+                      label: stats[2].$1,
+                      value: stats[2].$2,
+                      large: true,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (final i in const [0, 1]) ...[
+                          if (i == 1) const SizedBox(width: 8),
+                          Expanded(
+                            child: StatTile(
+                              palette: palette,
+                              label: stats[i].$1,
+                              value: stats[i].$2,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (final i in const [3, 4]) ...[
+                          if (i == 4) const SizedBox(width: 8),
+                          Expanded(
+                            child: StatTile(
+                              palette: palette,
+                              label: stats[i].$1,
+                              value: stats[i].$2,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              GardenPanel(
+                palette: palette,
+                padding: const EdgeInsets.all(10),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 4,
+                  runSpacing: 8,
+                  children: _toolButtons(palette),
+                ),
+              ),
+              const SizedBox(height: 12),
+              GardenPanel(
+                palette: palette,
+                child: RecordsCard(palette: palette, progress: _progress),
+              ),
+            ]),
+          ),
+        ],
+      ),
+    );
   }
 }

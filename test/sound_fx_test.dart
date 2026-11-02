@@ -381,7 +381,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Field cleared'), findsOneWidget);
-      expect(player.played.last, 'assets/audio/win.wav');
+      // The last move plays win; the summary card then adds its reward sound
+      // (a first clear is a new best).
+      expect(player.played.sublist(player.played.length - 2), [
+        'assets/audio/win.wav',
+        'assets/audio/new_best.wav',
+      ]);
       expect(player.played.where((a) => a.endsWith('win.wav')), hasLength(1));
       expect(player.played.where((a) => a.endsWith('boom.wav')), isEmpty);
     });

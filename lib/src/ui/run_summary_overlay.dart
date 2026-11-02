@@ -1,0 +1,408 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../art/garden_palette.dart';
+import '../art/garden_tile_art.dart';
+import '../game/difficulty.dart';
+import '../meta/garden_progress.dart';
+import 'garden_ui.dart';
+
+/// Facts shown on the end-of-run card.
+class RunReport {
+  const RunReport({
+    required this.won,
+    required this.difficulty,
+    required this.seconds,
+    required this.outcome,
+    this.daily = false,
+  });
+
+  final bool won;
+  final Difficulty difficulty;
+  final int seconds;
+  final bool daily;
+  final RunOutcome outcome;
+}
+
+/// End-of-run card: result, time, best, "New best!", XP with the level bar,
+/// unlocked themes and the daily streak. It appears after a short pause so
+/// the blast or bloom on the board can be seen; the board gets no input
+/// while it is up. Enter plays again, Escape closes it.
+class RunSummaryOverlay extends StatefulWidget {
+  const RunSummaryOverlay({
+    super.key,
+    required this.report,
+    required this.palette,
+    required this.onPlayAgain,
+    required this.onClose,
+    this.onNext,
+    this.onShown,
+    this.delay = const Duration(milliseconds: 750),
+  });
+
+  final RunReport report;
+  final GardenPalette palette;
+  final VoidCallback onPlayAgain;
+  final VoidCallback onClose;
+
+  /// Next harder difficulty; null hides the button.
+  final VoidCallback? onNext;
+
+  /// Called once when the card has popped in (for the reward sound).
+  final VoidCallback? onShown;
+  final Duration delay;
+
+  @override
+  State<RunSummaryOverlay> createState() => _RunSummaryOverlayState();
+}
+
+class _RunSummaryOverlayState extends State<RunSummaryOverlay>
+    with SingleTickerProviderStateMixin {
+  static const int _bodyMs = 1700;
+  late final int _delayMs = widget.delay.inMilliseconds;
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: _delayMs + _bodyMs),
+  )..forward();
+  final FocusNode _focus = FocusNode(debugLabel: 'run-summary');
+  final FocusNode _playAgainFocus = FocusNode(debugLabel: 'play-again');
+  bool _shownReported = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_checkShown);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _playAgainFocus.requestFocus();
+    });
+  }
+
+  void _checkShown() {
+    if (_shownReported || _phase(0, 0.2) < 1) return;
+    _shownReported = true;
+    widget.onShown?.call();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    _playAgainFocus.dispose();
+    super.dispose();
+  }
+
+  /// Progress (0..1) through [begin]..[end] of the card's own timeline
+  /// (after the delay), as fractions of its body length.
+  double _phase(double begin, double end, [Curve curve = Curves.easeOutCubic]) {
+    final ms = _controller.value * (_delayMs + _bodyMs) - _delayMs;
+    final t = ((ms / _bodyMs - begin) / (end - begin)).clamp(0.0, 1.0);
+    return curve.transform(t);
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    final isEnter =
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter;
+    if (!isEnter && key != LogicalKeyboardKey.escape) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.handled;
+    if (isEnter) {
+      widget.onPlayAgain();
+    } else {
+      widget.onClose();
+    }
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+    return Focus(
+      focusNode: _focus,
+      onKeyEvent: _onKey,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final appear = _phase(0, 0.2, Curves.easeOutBack);
+          return Stack(
+            children: [
+              ModalBarrier(
+                dismissible: false,
+                color: Color.fromRGBO(16, 26, 20, 0.55 * _phase(0, 0.15)),
+              ),
+              if (_phase(0, 0.01) > 0)
+                SafeArea(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Opacity(
+                          opacity: _phase(0, 0.1),
+                          child: Transform.scale(
+                            scale: 0.85 + 0.15 * appear,
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: GardenPanel(
+                                palette: palette,
+                                radius: 28,
+                                padding: const EdgeInsets.fromLTRB(
+                                  22,
+                                  18,
+                                  22,
+                                  16,
+                                ),
+                                child: SingleChildScrollView(
+                                  child: _content(palette),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _content(GardenPalette palette) {
+    final report = widget.report;
+    final outcome = report.outcome;
+    final title = report.won
+        ? (report.daily ? 'Daily garden cleared!' : 'Garden cleared!')
+        : 'Bonk! A mole!';
+    final subtitle = report.daily ? 'Daily Garden' : report.difficulty.title;
+    final best = outcome.progress.bestTime(report.difficulty);
+    final level = outcome.progress;
+    // Bar fills from the old XP to the new XP.
+    final barT = _phase(0.3, 0.75);
+    final before = outcome.progress.totalXp - outcome.xpGained;
+    final shownXp = before + (outcome.xpGained * barT).round();
+    final shown = GardenProgress.fromJson({'totalXp': shownXp});
+    final textPrimary = palette.textPrimary;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Transform.scale(
+          scale: 0.6 + 0.4 * _phase(0.05, 0.3, Curves.elasticOut),
+          child: TileArt(
+            palette: palette,
+            look: report.won ? TileLook.flower : TileLook.moleHit,
+            size: 76,
+            seed: 4,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w900,
+            color: report.won ? textPrimary : palette.danger,
+          ),
+        ),
+        Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: palette.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: StatTile(
+                palette: palette,
+                label: 'TIME',
+                value: report.won ? formatTime(report.seconds) : '--',
+                large: true,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: StatTile(
+                palette: palette,
+                label: report.daily ? 'STREAK' : 'BEST',
+                value: report.daily
+                    ? '${outcome.streak} d'
+                    : (best == null ? '--' : formatTime(best)),
+                large: true,
+              ),
+            ),
+          ],
+        ),
+        if (outcome.isNewBest) ...[
+          const SizedBox(height: 10),
+          Transform.scale(
+            scale: _phase(0.2, 0.4, Curves.elasticOut),
+            child: _Pill(
+              text: 'New best!',
+              color: palette.flowerCenter,
+              textColor: const Color(0xFF3B2A05),
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            LevelBadge(palette: palette, level: shown.level, size: 46),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '+${(outcome.xpGained * barT).round()} XP',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: palette.accent,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${shown.xpIntoLevel} / ${shown.xpForNextLevel}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  GardenProgressBar(
+                    palette: palette,
+                    value: shown.xpIntoLevel / shown.xpForNextLevel,
+                    height: 12,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (outcome.leveledUp && barT >= 1) ...[
+          const SizedBox(height: 10),
+          _Pill(
+            text: 'Level up! Lv ${level.level}',
+            color: palette.accent,
+            textColor: palette.onAccent,
+          ),
+        ],
+        for (final theme in outcome.newlyUnlockedThemes)
+          if (barT >= 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _Pill(
+                text: 'New theme: ${theme.label}',
+                color: palette.petal,
+                textColor: const Color(0xFF3B1830),
+              ),
+            ),
+        if (outcome.dailyRecorded) ...[
+          const SizedBox(height: 10),
+          Text(
+            'Daily streak: ${outcome.streak} day${outcome.streak == 1 ? '' : 's'}. Come back tomorrow!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: palette.textSecondary,
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: GardenButton(
+                palette: palette,
+                label: 'New Field',
+                icon: Icons.refresh_rounded,
+                focusNode: _playAgainFocus,
+                onPressed: widget.onPlayAgain,
+              ),
+            ),
+            if (widget.onNext != null) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: GardenButton(
+                  palette: palette,
+                  label: 'Next: ${report.difficulty.next!.label}',
+                  primary: false,
+                  onPressed: widget.onNext,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        TextButton(
+          onPressed: widget.onClose,
+          style: TextButton.styleFrom(foregroundColor: palette.textSecondary),
+          child: const Text(
+            'View board',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.text,
+    required this.color,
+    required this.textColor,
+  });
+
+  final String text;
+  final Color color;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x30000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 14,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+}
