@@ -169,6 +169,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   bool _themeTouched = false;
 
   RunReport? _report;
+
+  /// Win time to offer to the leaderboard once the summary card is shown.
+  int? _offerRegistrationFor;
   bool _summaryOpen = false;
   bool _gardenOpen = false;
 
@@ -338,6 +341,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _runStarted = false;
     _hitIndex = null;
     _report = null;
+    _offerRegistrationFor = null;
     _summaryOpen = false;
     _fx.clear();
   }
@@ -512,25 +516,26 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       );
       _summaryOpen = true;
     });
-    if (!won ||
-        _dailyDay != null ||
-        !widget.platform.allowsResultRegistration) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        offerResultRegistration(
-          context,
-          gameId: 'tiny-mines',
-          metric: 'time',
-          value: seconds,
-          displayValue: formatTime(seconds),
-        );
-      }
-    });
+    // The leaderboard prompt waits until the card has popped in, so the
+    // dialog sits on top of it (and owns the keyboard) instead of under it.
+    _offerRegistrationFor =
+        won && _dailyDay == null && widget.platform.allowsResultRegistration
+        ? seconds
+        : null;
   }
 
   void _onSummaryShown() {
+    final seconds = _offerRegistrationFor;
+    _offerRegistrationFor = null;
+    if (seconds != null && mounted) {
+      offerResultRegistration(
+        context,
+        gameId: 'tiny-mines',
+        metric: 'time',
+        value: seconds,
+        displayValue: formatTime(seconds),
+      );
+    }
     final outcome = _report?.outcome;
     if (outcome == null) return;
     if (outcome.leveledUp) {
@@ -608,50 +613,57 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   Widget build(BuildContext context) {
     final palette = _palette;
     final report = _report;
-    return Stack(
-      children: [
-        // Keep keyboard focus (Tab, Enter) out of the game under a card.
-        ExcludeFocus(
-          excluding: _overlayOpen || _summaryOpen || !_tutorialChecked,
-          child: _buildGame(context, palette),
-        ),
-        if (report != null && _summaryOpen)
-          Positioned.fill(
-            child: RunSummaryOverlay(
-              key: ValueKey(report),
-              report: report,
-              palette: palette,
-              delay: Duration(milliseconds: report.won ? 950 : 800),
-              onPlayAgain: _restart,
-              onClose: _closeSummary,
-              onShown: _onSummaryShown,
-              onNext:
-                  report.won && !report.daily && report.difficulty.next != null
-                  ? _playNext
-                  : null,
-            ),
+    // Any pointer down (board, cards, overlays) counts as the first user
+    // input that lets browsers start the music.
+    return Listener(
+      onPointerDown: (_) => _sound.onUserInput(),
+      child: Stack(
+        children: [
+          // Keep keyboard focus (Tab, Enter) out of the game under a card.
+          ExcludeFocus(
+            excluding: _overlayOpen || _summaryOpen || !_tutorialChecked,
+            child: _buildGame(context, palette),
           ),
-        if (_gardenOpen)
-          Positioned.fill(
-            child: GardenOverlay(
-              palette: palette,
-              progress: _progress,
-              today: _today,
-              dailyPlaying: _dailyDay != null && !_over,
-              onSelectTheme: _selectTheme,
-              onPlayDaily: _startDaily,
-              onClose: _closeGarden,
+          if (report != null && _summaryOpen)
+            Positioned.fill(
+              child: RunSummaryOverlay(
+                key: ValueKey(report),
+                report: report,
+                palette: palette,
+                delay: Duration(milliseconds: report.won ? 950 : 800),
+                onPlayAgain: _restart,
+                onClose: _closeSummary,
+                onShown: _onSummaryShown,
+                onNext:
+                    report.won &&
+                        !report.daily &&
+                        report.difficulty.next != null
+                    ? _playNext
+                    : null,
+              ),
             ),
-          ),
-        if (_tutorialOpen)
-          Positioned.fill(
-            child: HowToPlayOverlay(
-              steps: _tutorialSteps,
-              palette: palette,
-              onClose: _closeTutorial,
+          if (_gardenOpen)
+            Positioned.fill(
+              child: GardenOverlay(
+                palette: palette,
+                progress: _progress,
+                today: _today,
+                dailyPlaying: _dailyDay != null && !_over,
+                onSelectTheme: _selectTheme,
+                onPlayDaily: _startDaily,
+                onClose: _closeGarden,
+              ),
             ),
-          ),
-      ],
+          if (_tutorialOpen)
+            Positioned.fill(
+              child: HowToPlayOverlay(
+                steps: _tutorialSteps,
+                palette: palette,
+                onClose: _closeTutorial,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -665,25 +677,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: palette.skyBottom,
-      body: Listener(
-        onPointerDown: (_) => _sound.onUserInput(),
-        child: Stack(
-          children: [
-            Positioned.fill(child: GardenScenery(palette: palette)),
-            SafeArea(
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final wide =
-                      box.maxWidth >= 760 &&
-                      box.maxWidth / box.maxHeight >= 1.25;
-                  return wide
-                      ? _wideLayout(palette, box)
-                      : _narrowLayout(palette);
-                },
-              ),
+      body: Stack(
+        children: [
+          Positioned.fill(child: GardenScenery(palette: palette)),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final wide =
+                    box.maxWidth >= 760 && box.maxWidth / box.maxHeight >= 1.25;
+                return wide
+                    ? _wideLayout(palette, box)
+                    : _narrowLayout(palette);
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

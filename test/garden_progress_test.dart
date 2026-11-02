@@ -143,6 +143,11 @@ void main() {
       expect(p.streak, 3);
       final again = p.applyRun(loss);
       expect(again.dailyRecorded, isFalse);
+      expect(
+        again.xpGained,
+        lessThan(GardenProgress.dailyPlayXp + 3),
+        reason: 'no daily bonus for a day already recorded',
+      );
       expect(again.progress.daily.length, 3);
       expect(p.dailyResult(d3)!.won, isFalse);
       // Gap: restarts at 1, best streak stays.

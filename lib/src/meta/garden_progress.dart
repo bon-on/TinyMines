@@ -138,7 +138,9 @@ class GardenProgress {
   /// XP needed to go from [level] to the next one.
   static int xpToAdvance(int level) => 100 + 40 * (level < 1 ? 0 : level - 1);
 
-  static int xpForRun(RunResult run) {
+  /// XP for [run]. The daily bonus only applies when [dailyBonus] (the day's
+  /// result is being recorded now).
+  static int xpForRun(RunResult run, {bool dailyBonus = true}) {
     final base = winXp(run.difficulty);
     var xp = run.won
         ? base
@@ -146,7 +148,9 @@ class GardenProgress {
             3,
             base,
           );
-    if (run.isDaily) xp += dailyPlayXp + (run.won ? dailyWinXp : 0);
+    if (run.isDaily && dailyBonus) {
+      xp += dailyPlayXp + (run.won ? dailyWinXp : 0);
+    }
     return xp;
   }
 
@@ -208,7 +212,10 @@ class GardenProgress {
     final levelBefore = level;
     final name = run.difficulty.name;
     final previousBest = run.isDaily ? null : bestTimes[name];
-    final xp = xpForRun(run);
+    final xp = xpForRun(
+      run,
+      dailyBonus: run.dailyDay != null && !daily.containsKey(run.dailyDay),
+    );
 
     // Daily boards start with a free opening, so they never set the
     // difficulty's best time and are counted on their own.

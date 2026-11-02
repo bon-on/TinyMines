@@ -39,6 +39,28 @@ class _LateSeen extends TutorialStore {
   Future<void> markSeen() async {}
 }
 
+/// Answers "not seen" only when released.
+class _LateUnseen extends TutorialStore {
+  final Completer<void> release = Completer<void>();
+  @override
+  Future<bool> hasSeen() async {
+    await release.future;
+    return false;
+  }
+
+  @override
+  Future<void> markSeen() async {}
+}
+
+class _RecordingPlatform extends NoopGamePlatform {
+  _RecordingPlatform() : super(allowsResultRegistration: false);
+  final List<String> events = <String>[];
+  @override
+  void gameplayStart() => events.add('start');
+  @override
+  void gameplayStop() => events.add('stop');
+}
+
 /// Progress store whose load completes only when released.
 class _SlowProgressStore extends MemoryGardenProgressStore {
   _SlowProgressStore(super.value);
@@ -62,6 +84,9 @@ Future<void> _pump(
   TutorialStore? tutorial,
   Stopwatch? stopwatch,
   bool settle = true,
+  GamePlatform platform = const NoopGamePlatform(
+    allowsResultRegistration: false,
+  ),
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -74,7 +99,7 @@ Future<void> _pump(
         tutorialStore: tutorial ?? _Store(),
         stopwatch: stopwatch,
         now: () => _day,
-        platform: const NoopGamePlatform(allowsResultRegistration: false),
+        platform: platform,
       ),
     ),
   );
@@ -184,6 +209,24 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('a held tap is dropped when the tutorial opens instead', (
+      tester,
+    ) async {
+      final store = _LateUnseen();
+      final watch = FakeStopwatch();
+      await _pump(tester, tutorial: store, stopwatch: watch, settle: false);
+      await tester.pump();
+      await tester.tap(_tiles.at(14), warnIfMissed: false);
+      store.release.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('How to play'), findsOneWidget);
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+      expect(watch.isRunning, isFalse, reason: 'the board is untouched');
+      expect(find.textContaining('Field cleared'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('the first tap right after the tutorial closes counts', (
       tester,
     ) async {
@@ -269,6 +312,29 @@ void main() {
       expect(store.value.bestTime(Difficulty.hard), 99);
       expect(store.value.bestTime(Difficulty.easy), 0);
     });
+  });
+
+  testWidgets('the garden sheet pauses the clock and gameplay', (tester) async {
+    final platform = _RecordingPlatform();
+    final watch = FakeStopwatch();
+    await _pump(tester, stopwatch: watch, platform: platform);
+    await tester.tap(_tiles.at(0));
+    await tester.pump();
+    expect(watch.isRunning, isTrue);
+    await tester.tap(find.text('Garden'));
+    await tester.pumpAndSettle();
+    expect(find.text('My Garden'), findsOneWidget);
+    expect(watch.isRunning, isFalse);
+    expect(platform.events, ['start', 'stop']);
+    // The sheet blocks the board underneath.
+    await tester.tap(_tiles.at(35), warnIfMissed: false);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('My Garden'), findsNothing);
+    expect(watch.isRunning, isTrue);
+    expect(platform.events, ['start', 'stop', 'start']);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   group('themes and daily', () {
