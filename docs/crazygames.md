@@ -58,12 +58,14 @@ Sound: effects are muted while `SDK.game.settings.muteAudio` is true (read on ev
 - [ ] Input: Mouse click or touch tap to reveal, right click or long press to flag. No keyboard controls.
 - [ ] Covers to prepare (not created yet): 1920x1080, 800x1200, 800x800.
 - [ ] In the portal QA tool, check loading and gameplay events.
+- [ ] Progress Save: set to "Yes, using the Data Module from the CrazyGames SDK".
 
 ## Known limits
 
 - Progress is saved through the SDK Data module (`feature-crazygames-cloud-save`). On the portal submission form, set **Progress Save** to "Yes, using the Data Module from the CrazyGames SDK"; otherwise the Data module is disabled and progress stays in browser localStorage only.
   - All preferences go into one Data module key, `prefs_v1`, as `{rev, owner, values}`, and are mirrored to localStorage. The localStorage item `cg_prefs_stamp_v1` records the owner (username, null for guests) and revision of the local copy.
   - On start the local copy wins if it belongs to the same user and its revision is equal or higher; otherwise the account copy is used. Another user's local copy is never used. Progress from before this feature is adopted only when there is no account copy yet.
-  - A login or logout (`user.addAuthListener`) reloads the page. If the initial user cannot be determined, account saving is not enabled.
+  - While cloud save is active, the page reloads (`user.addAuthListener`) only when the player changes
+  to a different player or logs out. If the initial user cannot be determined, account saving is not enabled.
 - The board is a square grid; Easy/Normal/Hard are selectable.
 - Roboto is bundled (`assets/fonts/`), so the app does not fetch it from a Google font CDN.
