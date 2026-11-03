@@ -6,6 +6,7 @@ related_specs:
   - feature-tiny-mines-crazygames
   - feature-sound-effects
   - feature-retention-polish
+  - feature-crazygames-cloud-save
 evidence_files:
   - docs/crazygames.md
   - reports/tiny-mines-crazygames-verification.md
@@ -21,7 +22,7 @@ Produce an upload-ready CrazyGames web bundle from the same Flutter codebase.
 - Gameplay start/stop calls from the game screen on transitions.
 - `tool/build_crazygames.sh` and `docs/crazygames.md`.
 
-Excluded: gameplay changes, ads, Data/User modules, portal upload.
+Excluded: gameplay changes, ads, portal upload. (Data/User modules are covered only for progress saving by `feature-crazygames-cloud-save`.)
 
 ## Done Criteria
 - `flutter analyze`, `flutter test` and `flutter test --platform chrome test/web` pass.
