@@ -7,6 +7,7 @@ related_specs:
   - feature-retention-polish
   - feature-daily-practice
   - feature-crazygames-quality-recovery
+  - feature-garden-run
 evidence_files:
   - reports/tiny-mines-gameplay-verification.md
 ---

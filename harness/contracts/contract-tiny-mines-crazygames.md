@@ -7,6 +7,7 @@ related_specs:
   - feature-sound-effects
   - feature-retention-polish
   - feature-crazygames-cloud-save
+  - feature-garden-run
 evidence_files:
   - docs/crazygames.md
   - reports/tiny-mines-crazygames-verification.md
