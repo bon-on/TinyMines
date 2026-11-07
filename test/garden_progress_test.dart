@@ -264,4 +264,143 @@ void main() {
       expect(p.toJson(), const GardenProgress.initial().toJson());
     });
   });
+
+  group('garden run records', () {
+    test('a run adds xp once, counts the run and keeps the best stage', () {
+      const result = GardenRunResult(
+        stageReached: 4,
+        stagesCleared: 3,
+        participated: true,
+      );
+      final outcome = const GardenProgress.initial().applyGardenRun(result);
+      expect(outcome.xpGained, 55);
+      expect(outcome.isNewBest, isTrue);
+      expect(outcome.progress.totalXp, 55);
+      expect(outcome.progress.runsPlayed, 1);
+      expect(outcome.progress.bestRunStage, 4);
+
+      // A weaker run counts but does not lower or re-announce the record.
+      final worse = outcome.progress.applyGardenRun(
+        const GardenRunResult(
+          stageReached: 2,
+          stagesCleared: 1,
+          participated: true,
+        ),
+      );
+      expect(worse.isNewBest, isFalse);
+      expect(worse.progress.bestRunStage, 4);
+      expect(worse.progress.runsPlayed, 2);
+      expect(worse.progress.totalXp, 55 + 25);
+    });
+
+    test('a run without a dig changes nothing', () {
+      const base = GardenProgress.initial();
+      final outcome = base.applyGardenRun(
+        const GardenRunResult(
+          stageReached: 1,
+          stagesCleared: 0,
+          participated: false,
+        ),
+      );
+      expect(identical(outcome.progress, base), isTrue);
+      expect(outcome.xpGained, 0);
+      expect(outcome.isNewBest, isFalse);
+    });
+
+    test('best times, wins, plays and daily state are untouched', () {
+      final before = const GardenProgress.initial()
+          .applyRun(_win(Difficulty.easy, 40))
+          .progress
+          .applyRun(_win(Difficulty.normal, 90, day: '2026-11-02'))
+          .progress;
+      final after = before
+          .applyGardenRun(
+            const GardenRunResult(
+              stageReached: 6,
+              stagesCleared: 5,
+              participated: true,
+            ),
+          )
+          .progress;
+      expect(after.bestTimes, before.bestTimes);
+      expect(after.wins, before.wins);
+      expect(after.plays, before.plays);
+      expect(after.daily.keys, before.daily.keys);
+      expect(after.streak, before.streak);
+      expect(after.bestStreak, before.bestStreak);
+      expect(after.lastDailyDay, before.lastDailyDay);
+    });
+
+    test('level ups and new themes are reported', () {
+      final outcome = GardenProgress.fromJson({'totalXp': 235}).applyGardenRun(
+        const GardenRunResult(
+          stageReached: 2,
+          stagesCleared: 1,
+          participated: true,
+        ),
+      );
+      expect(outcome.leveledUp, isTrue);
+      expect(outcome.newlyUnlockedThemes, contains(GardenTheme.autumn));
+    });
+
+    test('fields round-trip through JSON and old saves read as zero', () {
+      final saved = const GardenProgress.initial()
+          .applyGardenRun(
+            const GardenRunResult(
+              stageReached: 9,
+              stagesCleared: 8,
+              participated: true,
+            ),
+          )
+          .progress;
+      final restored = GardenProgress.fromJson(
+        jsonDecode(jsonEncode(saved.toJson())),
+      );
+      expect(restored.runsPlayed, 1);
+      expect(restored.bestRunStage, 9);
+      expect(restored.totalXp, saved.totalXp);
+
+      final old = GardenProgress.fromJson({'totalXp': 50, 'wins': {'easy': 1}});
+      expect(old.runsPlayed, 0);
+      expect(old.bestRunStage, 0);
+      expect(old.totalXp, 50);
+    });
+
+    test('corrupt values fall back to zero without losing other fields', () {
+      for (final bad in <Object?>[-3, 'x', null, double.nan, 1e400, [], {}]) {
+        final progress = GardenProgress.fromJson({
+          'totalXp': 70,
+          'runsPlayed': bad,
+          'bestRunStage': bad,
+        });
+        expect(progress.runsPlayed, 0, reason: '$bad');
+        expect(progress.bestRunStage, 0, reason: '$bad');
+        expect(progress.totalXp, 70);
+      }
+      final fractional = GardenProgress.fromJson({
+        'runsPlayed': 2.9,
+        'bestRunStage': 7,
+      });
+      expect(fractional.runsPlayed, 2);
+      expect(fractional.bestRunStage, 7);
+    });
+
+    test('the store persists the fields', () async {
+      SharedPreferences.setMockInitialValues({});
+      const store = GardenProgressStore();
+      final saved = const GardenProgress.initial()
+          .applyGardenRun(
+            const GardenRunResult(
+              stageReached: 3,
+              stagesCleared: 2,
+              participated: true,
+            ),
+          )
+          .progress;
+      await store.save(saved);
+      final loaded = await store.load();
+      expect(loaded.runsPlayed, 1);
+      expect(loaded.bestRunStage, 3);
+    });
+  });
 }

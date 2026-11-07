@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'fair_easy_field.dart';
@@ -18,6 +19,7 @@ class MineField {
     required this.mineCount,
     math.Random? random,
     this.requireLogicalSolution = false,
+    this.survivable = false,
   }) : _random = random ?? math.Random(),
        cells = List.generate(size * size, (_) => MineCell()) {
     if (requireLogicalSolution && (size != 6 || mineCount != 5)) {
@@ -33,12 +35,27 @@ class MineField {
   /// Regular Easy can opt into bounded, no-guess board selection. The default
   /// path is unchanged for daily seeds and other difficulties.
   final bool requireLogicalSolution;
+
+  /// Garden Run boards: a dug mine is shown as a flagged, exploded mole and
+  /// play continues (the caller charges a heart). Only [exhaust] ends such a
+  /// board as lost. Regular boards are unaffected.
+  final bool survivable;
   final math.Random _random;
   final List<MineCell> cells;
   bool _armed = false;
+  bool _exhausted = false;
+  final Set<int> _blasted = <int>{};
+  final List<int> _lastBlasts = <int>[];
 
   bool get armed => _armed;
-  bool get lost => cells.any((cell) => cell.mine && cell.revealed);
+  bool get lost =>
+      _exhausted || (!survivable && cells.any((c) => c.mine && c.revealed));
+
+  /// Mines dug on a [survivable] board so far.
+  Set<int> get blasted => UnmodifiableSetView(_blasted);
+
+  /// Mines dug by the latest [reveal] or [chord] call.
+  List<int> get lastBlasts => UnmodifiableListView(_lastBlasts);
   bool get won => cells.where((c) => !c.mine).every((c) => c.revealed);
   int get flags => cells.where((cell) => cell.flagged).length;
 
@@ -91,11 +108,32 @@ class MineField {
   }
 
   RevealOutcome reveal(int index) {
+    _lastBlasts.clear();
+    return _reveal(index);
+  }
+
+  /// Ends a [survivable] board as lost: every mine is uncovered.
+  void exhaust() {
+    if (_exhausted) return;
+    for (final cell in cells.where((c) => c.mine)) {
+      cell.revealed = true;
+    }
+    _exhausted = true;
+  }
+
+  RevealOutcome _reveal(int index) {
     if (lost || won) return RevealOutcome.none;
     final cell = cells[index];
     if (cell.flagged || cell.revealed) return RevealOutcome.none;
     if (!_armed) plantMines(index);
 
+    if (cell.mine && survivable) {
+      cell.revealed = true;
+      cell.flagged = true;
+      _blasted.add(index);
+      _lastBlasts.add(index);
+      return RevealOutcome.exploded;
+    }
     if (cell.mine) {
       for (final mineCell in cells.where((c) => c.mine)) {
         mineCell.revealed = true;
@@ -132,12 +170,18 @@ class MineField {
     final flagged = around.where((n) => cells[n].flagged).length;
     if (flagged != cell.nearby) return RevealOutcome.none;
 
+    _lastBlasts.clear();
     var outcome = RevealOutcome.none;
     for (final next in around) {
       if (cells[next].flagged || cells[next].revealed) continue;
-      final result = reveal(next);
-      if (result == RevealOutcome.exploded) return result;
-      if (result == RevealOutcome.safe) outcome = RevealOutcome.safe;
+      final result = _reveal(next);
+      if (result == RevealOutcome.exploded) {
+        if (!survivable) return result;
+        outcome = result;
+      } else if (result == RevealOutcome.safe &&
+          outcome != RevealOutcome.exploded) {
+        outcome = RevealOutcome.safe;
+      }
     }
     return outcome;
   }

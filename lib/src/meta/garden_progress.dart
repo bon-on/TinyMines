@@ -1,4 +1,5 @@
 import '../game/difficulty.dart';
+import '../game/garden_run.dart';
 import 'daily_challenge.dart';
 import 'garden_theme.dart';
 
@@ -30,6 +31,22 @@ class RunResult {
   final bool practice;
 
   bool get isDaily => dailyDay != null;
+}
+
+/// Facts about one finished Garden Run, fed to [GardenProgress.applyGardenRun].
+class GardenRunResult {
+  const GardenRunResult({
+    required this.stageReached,
+    required this.stagesCleared,
+    required this.participated,
+  });
+
+  /// Highest stage the run got to.
+  final int stageReached;
+  final int stagesCleared;
+
+  /// The player dug at least one patch; a run that did not earns nothing.
+  final bool participated;
 }
 
 /// Saved result of one daily garden.
@@ -81,7 +98,7 @@ class RunOutcome {
 }
 
 /// Saved meta progress: best times, play counts, garden XP, theme, daily
-/// results and the daily streak.
+/// results, the daily streak and Garden Run records.
 ///
 /// XP per run: a win earns [winXp] for its difficulty (Easy 30, Normal 70,
 /// Hard 150); a mine hit earns a share of it for the dug tiles (at least 3).
@@ -99,6 +116,8 @@ class GardenProgress {
     required this.streak,
     required this.lastDailyDay,
     required this.bestStreak,
+    this.runsPlayed = 0,
+    this.bestRunStage = 0,
   });
 
   const GardenProgress.initial()
@@ -110,7 +129,9 @@ class GardenProgress {
       daily = const <String, DailyResult>{},
       streak = 0,
       lastDailyDay = null,
-      bestStreak = 0;
+      bestStreak = 0,
+      runsPlayed = 0,
+      bestRunStage = 0;
 
   static const int dailyPlayXp = 15;
   static const int dailyWinXp = 40;
@@ -132,6 +153,12 @@ class GardenProgress {
   final int streak;
   final String? lastDailyDay;
   final int bestStreak;
+
+  /// Garden Runs in which the player dug at least one patch.
+  final int runsPlayed;
+
+  /// Highest Garden Run stage reached (0 before the first run).
+  final int bestRunStage;
 
   static int winXp(Difficulty difficulty) => switch (difficulty) {
     Difficulty.easy => 30,
@@ -305,6 +332,52 @@ class GardenProgress {
     );
   }
 
+  /// Records a finished Garden Run: XP once, the run count and the best
+  /// stage. Best times, wins/plays and the daily state are never touched.
+  RunOutcome applyGardenRun(GardenRunResult run) {
+    final levelBefore = level;
+    if (!run.participated) {
+      return RunOutcome(
+        progress: this,
+        xpGained: 0,
+        isNewBest: false,
+        previousBest: null,
+        levelBefore: levelBefore,
+        levelAfter: levelBefore,
+        newlyUnlockedThemes: const [],
+        dailyRecorded: false,
+        streak: streak,
+      );
+    }
+    final xp = GardenRun.xpFor(
+      stagesCleared: run.stagesCleared,
+      participated: true,
+    );
+    final isNewBest = run.stageReached > bestRunStage;
+    final next = _copy(
+      totalXp: totalXp + xp,
+      runsPlayed: runsPlayed + 1,
+      bestRunStage: isNewBest ? run.stageReached : bestRunStage,
+    );
+    final levelAfter = next.level;
+    return RunOutcome(
+      progress: next,
+      xpGained: xp,
+      isNewBest: isNewBest,
+      previousBest: bestRunStage > 0 ? bestRunStage : null,
+      levelBefore: levelBefore,
+      levelAfter: levelAfter,
+      newlyUnlockedThemes: [
+        for (final theme in GardenTheme.values)
+          if (levelBefore < theme.requiredLevel &&
+              levelAfter >= theme.requiredLevel)
+            theme,
+      ],
+      dailyRecorded: false,
+      streak: streak,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'bestTimes': bestTimes,
     'wins': wins,
@@ -317,6 +390,8 @@ class GardenProgress {
     'streak': streak,
     'lastDailyDay': lastDailyDay,
     'bestStreak': bestStreak,
+    'runsPlayed': runsPlayed,
+    'bestRunStage': bestRunStage,
   };
 
   /// Tolerant parser: every missing or invalid field falls back on its own.
@@ -368,6 +443,8 @@ class GardenProgress {
           ? last
           : null,
       bestStreak: readInt(json['bestStreak']),
+      runsPlayed: readInt(json['runsPlayed']),
+      bestRunStage: readInt(json['bestRunStage']),
     );
     final theme = json['selectedTheme'];
     return progress.withTheme(
@@ -385,6 +462,8 @@ class GardenProgress {
     int? streak,
     String? lastDailyDay,
     int? bestStreak,
+    int? runsPlayed,
+    int? bestRunStage,
   }) {
     return GardenProgress(
       bestTimes: Map.unmodifiable(bestTimes ?? this.bestTimes),
@@ -396,6 +475,8 @@ class GardenProgress {
       streak: streak ?? this.streak,
       lastDailyDay: lastDailyDay ?? this.lastDailyDay,
       bestStreak: bestStreak ?? this.bestStreak,
+      runsPlayed: runsPlayed ?? this.runsPlayed,
+      bestRunStage: bestRunStage ?? this.bestRunStage,
     );
   }
 }

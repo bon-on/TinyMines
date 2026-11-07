@@ -90,4 +90,64 @@ void main() {
     expect(field.won, isTrue);
     expect(field.lost, isFalse);
   });
+
+  group('survivable boards (Garden Run)', () {
+    MineField field() => MineField(size: 4, mineCount: 2, survivable: true)
+      ..plantMinesAt(const [0, 15]);
+
+    test('a dug mole is flagged and exploded and play goes on', () {
+      final f = field();
+      expect(f.reveal(0), RevealOutcome.exploded);
+      expect(f.lost, isFalse);
+      expect(f.cells[0].revealed, isTrue);
+      expect(f.cells[0].flagged, isTrue);
+      expect(f.blasted, {0});
+      expect(f.lastBlasts, [0]);
+      expect(f.cells[15].revealed, isFalse);
+      // The flag cannot be removed and the cell cannot be dug again.
+      expect(f.toggleFlag(0), isFalse);
+      expect(f.reveal(0), RevealOutcome.none);
+      expect(f.reveal(5), RevealOutcome.safe);
+      expect(f.lastBlasts, isEmpty);
+    });
+
+    test('the board is won once every safe tile is open', () {
+      final f = field()..reveal(0);
+      for (var i = 0; i < 16; i++) {
+        if (!f.cells[i].mine) f.reveal(i);
+      }
+      expect(f.won, isTrue);
+      expect(f.lost, isFalse);
+    });
+
+    test('a chord counts exploded moles and digs the rest', () {
+      // Mines at 0 and 15; flag a wrong tile (1) next to the "1" at 5.
+      final f = field();
+      f.reveal(5);
+      expect(f.cells[5].nearby, 1);
+      f.toggleFlag(1);
+      expect(f.chord(5), RevealOutcome.exploded);
+      expect(f.lastBlasts, [0]);
+      expect(f.lost, isFalse);
+      // Unlike a regular board, the chord continued past the mole.
+      expect(f.cells[4].revealed, isTrue);
+      expect(f.cells[6].revealed, isTrue);
+    });
+
+    test('exhaust uncovers every mole and ends the board as lost', () {
+      final f = field()..reveal(0);
+      f.exhaust();
+      expect(f.lost, isTrue);
+      expect(f.cells[15].revealed, isTrue);
+      expect(f.reveal(5), RevealOutcome.none);
+    });
+
+    test('regular boards still end on the first mole', () {
+      final f = MineField(size: 4, mineCount: 2)..plantMinesAt(const [0, 15]);
+      expect(f.reveal(0), RevealOutcome.exploded);
+      expect(f.lost, isTrue);
+      expect(f.cells[15].revealed, isTrue);
+      expect(f.blasted, isEmpty);
+    });
+  });
 }
