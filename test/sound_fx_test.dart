@@ -47,9 +47,18 @@ Finder get _tiles =>
     find.descendant(of: find.byType(GridView), matching: find.byType(InkWell));
 
 /// Easy field (6x6, 5 mines) with the seed the screen is given below.
-MineField _field() => MineField(size: 6, mineCount: 5, random: math.Random(1));
+MineField _field() => MineField(
+  size: 6,
+  mineCount: 5,
+  random: math.Random(1),
+  requireLogicalSolution: true,
+);
 
-Future<void> _pump(WidgetTester tester, SoundFx fx) async {
+Future<void> _pump(
+  WidgetTester tester,
+  SoundFx fx, {
+  GamePlatform platform = const NoopGamePlatform(),
+}) async {
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -59,6 +68,7 @@ Future<void> _pump(WidgetTester tester, SoundFx fx) async {
         random: math.Random(1),
         tutorialStore: _SeenStore(),
         soundFx: fx,
+        platform: platform,
       ),
     ),
   );
@@ -100,6 +110,34 @@ void main() {
       SoundFx(platform: _ThrowingPlatform(), player: player).play(Sfx.flag);
       expect(player.played, hasLength(1));
     });
+
+    test(
+      'late effects respect app visibility without changing user mute',
+      () async {
+        final player = _RecordingPlayer();
+        final fx = SoundFx(player: player);
+        fx.setAppVisible(false);
+        fx.play(Sfx.newBest);
+        fx.play(Sfx.levelUp);
+        expect(player.played, isEmpty);
+        expect(fx.userMuted, isFalse);
+
+        fx.setAppVisible(true);
+        fx.play(Sfx.flag);
+        expect(player.played, ['assets/audio/flag.wav']);
+
+        await fx.setUserMuted(true);
+        fx.setAppVisible(false);
+        fx.setAppVisible(true);
+        fx.play(Sfx.reveal);
+        expect(fx.userMuted, isTrue);
+        expect(player.played, hasLength(1));
+        await fx.setUserMuted(false);
+        fx.play(Sfx.win);
+        expect(player.played.last, 'assets/audio/win.wav');
+        fx.dispose();
+      },
+    );
 
     test('mute choice persists under sound_muted_v1', () async {
       final fx = SoundFx(player: _RecordingPlayer());
@@ -389,6 +427,48 @@ void main() {
       ]);
       expect(player.played.where((a) => a.endsWith('win.wav')), hasLength(1));
       expect(player.played.where((a) => a.endsWith('boom.wav')), isEmpty);
+    });
+
+    testWidgets('a delayed summary reward stays silent while inactive', (
+      tester,
+    ) async {
+      final player = _RecordingPlayer();
+      final fx = SoundFx(player: player);
+      await _pump(
+        tester,
+        fx,
+        platform: const NoopGamePlatform(allowsResultRegistration: false),
+      );
+      final reference = _field()..reveal(0);
+      final replay = _field();
+      for (var index = 0; index < reference.cells.length; index++) {
+        if (reference.cells[index].mine || replay.cells[index].revealed) {
+          continue;
+        }
+        replay.reveal(index);
+        await tester.tap(_tiles.at(index));
+        await tester.pump();
+      }
+      expect(player.played.last, 'assets/audio/win.wav');
+      final beforeReward = List<String>.of(player.played);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(find.text('New best!'), findsOneWidget);
+      expect(player.played, beforeReward);
+      expect(fx.userMuted, isFalse);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.tap(find.text('New Field'));
+      await tester.pump();
+      await tester.longPress(_tiles.first);
+      await tester.pump();
+      expect(player.played.last, 'assets/audio/flag.wav');
+      expect(player.played, [...beforeReward, 'assets/audio/flag.wav']);
+      expect(fx.userMuted, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fx.dispose();
     });
 
     testWidgets('a chord plays one reveal, or one boom on a wrong flag', (

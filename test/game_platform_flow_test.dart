@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tiny_mines/how_to_play.dart';
@@ -41,8 +42,12 @@ Finder get _tiles =>
 /// Easy field (6x6, 5 mines) with the same seed the screen uses, so tests can
 /// tell which tiles are safe.
 MineField _referenceField() {
-  final field = MineField(size: 6, mineCount: 5, random: math.Random(1))
-    ..reveal(0);
+  final field = MineField(
+    size: 6,
+    mineCount: 5,
+    random: math.Random(1),
+    requireLogicalSolution: true,
+  )..reveal(0);
   return field;
 }
 
@@ -72,7 +77,12 @@ Future<void> _win(WidgetTester tester) async {
     for (var i = 0; i < reference.cells.length; i++)
       if (!reference.cells[i].mine) i,
   ];
-  final replay = MineField(size: 6, mineCount: 5, random: math.Random(1));
+  final replay = MineField(
+    size: 6,
+    mineCount: 5,
+    random: math.Random(1),
+    requireLogicalSolution: true,
+  );
   for (final index in safe) {
     if (replay.cells[index].revealed) continue;
     replay.reveal(index);
@@ -125,7 +135,7 @@ void main() {
     await tester.pump();
     expect(platform.events, <String>['start', 'stop']);
 
-    await tester.tap(find.text('Next'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(platform.events, <String>['start', 'stop']);
 

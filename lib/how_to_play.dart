@@ -32,7 +32,13 @@ class TutorialStore {
 }
 
 class TutorialStep {
-  const TutorialStep(this.icon, this.text, {this.art, this.nearby = 0});
+  const TutorialStep(
+    this.icon,
+    this.text, {
+    this.art,
+    this.nearby = 0,
+    this.neighborExample = false,
+  });
 
   /// Shown when there is no [art].
   final IconData icon;
@@ -43,6 +49,9 @@ class TutorialStep {
 
   /// Pebble number for a [TileLook.soil] illustration.
   final int nearby;
+
+  /// Show the clue and all eight neighbors in a small visual example.
+  final bool neighborExample;
 }
 
 /// Modal "How to play" card shown over a dimmed game. Swallows pointer and
@@ -173,7 +182,9 @@ class _HowToPlayOverlayState extends State<HowToPlayOverlay> {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          if (art != null)
+                          if (step.neighborExample)
+                            _NeighborExample(palette: palette)
+                          else if (art != null)
                             TileArt(
                               palette: palette,
                               look: art,
@@ -250,6 +261,53 @@ class _HowToPlayOverlayState extends State<HowToPlayOverlay> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One visible clue and its eight surrounding cells; illustration only.
+class _NeighborExample extends StatelessWidget {
+  const _NeighborExample({required this.palette});
+
+  final GardenPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      key: const ValueKey('neighbor-example'),
+      label: 'A 2 counts two moles among all eight neighboring patches',
+      child: SizedBox(
+        width: 126,
+        height: 126,
+        child: Column(
+          children: [
+            for (var row = 0; row < 3; row++)
+              Expanded(
+                child: Row(
+                  children: [
+                    for (var col = 0; col < 3; col++)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: TileArt(
+                            palette: palette,
+                            look: row == 1 && col == 1
+                                ? TileLook.soil
+                                : (row == 0 && col == 0) ||
+                                      (row == 2 && col == 2)
+                                ? TileLook.mole
+                                : TileLook.covered,
+                            nearby: row == 1 && col == 1 ? 2 : 0,
+                            size: 38,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -46,6 +46,8 @@ On `localhost` the SDK environment is `local`; the console shows `Requesting gam
 | Overlay closes | `gameplayStart()` |
 | Game over / field cleared | `gameplayStop()` |
 | Restart, new field, difficulty switch | `gameplayStart()` |
+| App inactive / hidden / paused | `gameplayStop()`; solve clock and music pause |
+| App resumed with no help/garden/result overlay | `gameplayStart()`; active solve clock resumes |
 
 Calls are sent on transitions only. Leaderboard registration prompts are disabled in this build, and there are no ads.
 
@@ -54,9 +56,9 @@ Sound: effects are muted while `SDK.game.settings.muteAudio` is true (read on ev
 ## Upload checklist
 
 - [ ] Submit through Basic Launch (ads are off there).
-- [ ] Orientation: portrait. On desktop the game is centered in a narrow column.
-- [ ] Input: Mouse click or touch tap to reveal, right click or long press to flag. No keyboard controls.
-- [ ] Covers to prepare (not created yet): 1920x1080, 800x1200, 800x800.
+- [ ] Orientation: both supported. Wide viewports show the garden and tools beside the board.
+- [ ] Input: choose Dig or Flag, then click/tap a tile. Right click and long press always toggle a flag. Enter/Escape work on help/results; cells use pointer input.
+- [ ] Updated title-only covers are prepared in `../_marketing/TinyMines/quality-recovery-2026-11-07/`: 1920x1080, 800x1200, 800x800.
 - [ ] In the portal QA tool, check loading and gameplay events.
 - [ ] Progress Save: set to "Yes, using the Data Module from the CrazyGames SDK".
 
@@ -69,3 +71,15 @@ Sound: effects are muted while `SDK.game.settings.muteAudio` is true (read on ev
   to a different player or logs out. If the initial user cannot be determined, account saving is not enabled.
 - The board is a square grid; Easy/Normal/Hard are selectable.
 - Roboto is bundled (`assets/fonts/`), so the app does not fetch it from a Google font CDN.
+
+## Quality recovery (2026-11-07)
+
+The rejected build received a general quality comment, with no specific SDK defect identified. The recovery preserves the garden art and daily-practice data while improving first-session play:
+
+- Regular Easy uses verified logic-solvable layouts after a safe first opening; Normal, Hard and fixed daily layouts retain their original generation.
+- Visible Dig/Flag controls support tap-to-flag on touch screens. A selected mode never changes existing tiles; every new field starts in Dig.
+- A single skippable visual help card demonstrates a number and its eight surrounding patches. An untouched field clearly says the first dig is safe.
+- A number tapped with mismatched flags explains how many flags it needs and how many are placed. Existing hints still cost ten seconds.
+- Losing app focus stops gameplay events, solve time, music and late sound effects until play can resume without an overlay.
+
+Local checks and independent review are recorded in `reports/quality-recovery-ui.md` and the coordinator's final recovery report. Local verification does not claim platform acceptance or completed portal QA.

@@ -15,12 +15,14 @@ class RunReport {
     required this.seconds,
     required this.outcome,
     this.daily = false,
+    this.practice = false,
   });
 
   final bool won;
   final Difficulty difficulty;
   final int seconds;
   final bool daily;
+  final bool practice;
   final RunOutcome outcome;
 }
 
@@ -36,6 +38,7 @@ class RunSummaryOverlay extends StatefulWidget {
     required this.onPlayAgain,
     required this.onClose,
     this.onNext,
+    this.onPractice,
     this.onShown,
     this.delay = const Duration(milliseconds: 750),
   });
@@ -47,6 +50,7 @@ class RunSummaryOverlay extends StatefulWidget {
 
   /// Next harder difficulty; null hides the button.
   final VoidCallback? onNext;
+  final VoidCallback? onPractice;
 
   /// Called once when the card has popped in (for the reward sound).
   final VoidCallback? onShown;
@@ -113,6 +117,8 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
     if (!isEnter && key != LogicalKeyboardKey.escape) {
       return KeyEventResult.ignored;
     }
+    // Let a focused button activate its own action (including practice).
+    if (isEnter && !_focus.hasPrimaryFocus) return KeyEventResult.ignored;
     if (event is! KeyDownEvent) return KeyEventResult.handled;
     if (isEnter) {
       widget.onPlayAgain();
@@ -184,7 +190,11 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
     final title = report.won
         ? (report.daily ? 'Daily garden cleared!' : 'Garden cleared!')
         : 'Bonk! A mole!';
-    final subtitle = report.daily ? 'Daily Garden' : report.difficulty.title;
+    final subtitle = report.practice
+        ? 'Daily practice - unscored'
+        : report.daily
+        ? 'Daily Garden'
+        : report.difficulty.title;
     final best = outcome.progress.bestTime(report.difficulty);
     final level = outcome.progress;
     // Bar fills from the old XP to the new XP.
@@ -331,6 +341,24 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
           ),
         ],
         const SizedBox(height: 16),
+        if (widget.onPractice != null) ...[
+          Text(
+            report.practice
+                ? 'No XP or records. Your original daily result is unchanged.'
+                : 'Retry this board for practice. Your daily result stays saved.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: palette.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          GardenButton(
+            palette: palette,
+            label: 'Practice same board',
+            icon: Icons.school_rounded,
+            primary: false,
+            onPressed: widget.onPractice,
+          ),
+          const SizedBox(height: 10),
+        ],
         Row(
           children: [
             Expanded(

@@ -87,6 +87,7 @@ Future<void> _pump(
   GamePlatform platform = const NoopGamePlatform(
     allowsResultRegistration: false,
   ),
+  DateTime Function()? now,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -98,7 +99,7 @@ Future<void> _pump(
         progressStore: store ?? MemoryGardenProgressStore(),
         tutorialStore: tutorial ?? _Store(),
         stopwatch: stopwatch,
-        now: () => _day,
+        now: now ?? () => _day,
         platform: platform,
       ),
     ),
@@ -106,12 +107,21 @@ Future<void> _pump(
   if (settle) await tester.pumpAndSettle();
 }
 
-MineField _easy() =>
-    MineField(size: 6, mineCount: 5, random: math.Random(1))..reveal(0);
+MineField _easy() => MineField(
+  size: 6,
+  mineCount: 5,
+  random: math.Random(1),
+  requireLogicalSolution: true,
+)..reveal(0);
 
 Future<void> _winEasy(WidgetTester tester) async {
   final reference = _easy();
-  final replay = MineField(size: 6, mineCount: 5, random: math.Random(1));
+  final replay = MineField(
+    size: 6,
+    mineCount: 5,
+    random: math.Random(1),
+    requireLogicalSolution: true,
+  );
   for (var i = 0; i < 36; i++) {
     if (reference.cells[i].mine || replay.cells[i].revealed) continue;
     replay.reveal(i);
@@ -157,6 +167,12 @@ void main() {
         await _loseEasy(tester);
         expect(find.text('Bonk! A mole!'), findsOneWidget);
         expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('View board'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(find.text('View board')).bottom,
+          lessThanOrEqualTo(size.height),
+        );
         await tester.tap(find.text('View board'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
@@ -388,11 +404,116 @@ void main() {
       expect(store.value.streak, 3);
       await tester.tap(find.text('New Field'));
       await tester.pumpAndSettle();
-      expect(find.text('Done for today'), findsOneWidget);
-      await tester.tap(find.text('Done for today'));
+      expect(find.text('Practice daily'), findsOneWidget);
+      await tester.tap(find.text('Practice daily'));
       await tester.pumpAndSettle();
-      expect(_tiles, findsNWidgets(36), reason: 'no second daily attempt');
+      expect(_tiles, findsNWidgets(81), reason: 'only an unscored retry');
+      expect(find.textContaining('no XP or records'), findsOneWidget);
       expect(find.text('3 days'), findsOneWidget);
+    });
+
+    testWidgets(
+      'same-board practice preserves a loss, survives reload and midnight',
+      (tester) async {
+        final store = MemoryGardenProgressStore();
+        var now = _day;
+        final (reference, _) = DailyChallenge.build(_day);
+        await _pump(
+          tester,
+          size: const Size(1280, 720),
+          store: store,
+          now: () => now,
+          stopwatch: FakeStopwatch(),
+        );
+        await tester.tap(find.text('Play daily'));
+        await tester.pumpAndSettle();
+        final mine = reference.cells.indexWhere((cell) => cell.mine);
+        await tester.tap(_tiles.at(mine));
+        await tester.pumpAndSettle();
+        final original = store.value.toJson();
+        final saves = store.saveCount;
+        now = DateTime(_day.year, _day.month, _day.day + 1);
+        await tester.tap(find.text('Practice same board'));
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Practice for 11/2'),
+          findsNothing,
+        ); // full date format below
+        expect(find.textContaining('no XP or records'), findsOneWidget);
+        // Solve with yesterday's mine layout: a date-based rebuild of today's
+        // board would hit a mine instead of reaching this win.
+        for (var i = 0; i < reference.cells.length; i++) {
+          if (reference.cells[i].mine) continue;
+          await tester.tap(_tiles.at(i));
+          await tester.pump();
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Daily garden cleared!'), findsOneWidget);
+        expect(find.text('Daily practice - unscored'), findsOneWidget);
+        expect(find.text('+0 XP'), findsOneWidget);
+        expect(store.value.toJson(), original);
+        expect(store.saveCount, saves);
+        // Repeat via a keyboard-focused action.
+        final practice = find
+            .ancestor(
+              of: find.text('Practice same board'),
+              matching: find.byType(InkWell),
+            )
+            .first;
+        await tester.tap(practice);
+        await tester.pumpAndSettle();
+        await tester.tap(_tiles.at(mine));
+        await tester.pumpAndSettle();
+        expect(store.value.toJson(), original);
+        await tester.pumpWidget(const SizedBox.shrink());
+        now = _day;
+        await _pump(
+          tester,
+          size: const Size(1280, 720),
+          store: store,
+          now: () => now,
+          stopwatch: FakeStopwatch(),
+        );
+        await tester.tap(find.text('Practice daily'));
+        await tester.pumpAndSettle();
+        await tester.tap(_tiles.at(mine));
+        await tester.pumpAndSettle();
+        expect(store.value.toJson(), original);
+        await tester.tap(find.text('New Field'));
+        await tester.pumpAndSettle();
+        await _winEasy(tester);
+        expect(store.value.totalXp, greaterThan(original['totalXp'] as int));
+        expect(store.value.dailyResult(_day)?.won, isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets('daily cannot start until saved results have loaded', (
+      tester,
+    ) async {
+      final original = const GardenProgress.initial()
+          .applyRun(
+            RunResult(
+              difficulty: Difficulty.normal,
+              won: false,
+              seconds: 3,
+              revealedFraction: 0.1,
+              dailyDay: DailyChallenge.dayKey(_day),
+            ),
+          )
+          .progress;
+      final store = _SlowProgressStore(original);
+      await _pump(tester, size: const Size(1280, 720), store: store);
+      await tester.tap(find.text('Play daily'));
+      await tester.pumpAndSettle();
+      expect(_tiles, findsNWidgets(36));
+      store.release.complete();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Practice daily'));
+      await tester.pumpAndSettle();
+      expect(_tiles, findsNWidgets(81));
+      expect(find.textContaining('no XP or records'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
   });
 }

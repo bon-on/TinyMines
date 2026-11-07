@@ -82,14 +82,13 @@ void main() {
     expect(find.text('1'), findsNothing);
   });
 
-  testWidgets('Next walks the steps and Play stores the flag', (tester) async {
+  testWidgets('one visual card explains neighbors and Play stores the flag', (
+    tester,
+  ) async {
     final store = _FakeStore();
     await _pump(tester, store);
-    expect(find.text('Next'), findsOneWidget);
-    await tester.tap(find.text('Next'));
-    await tester.pump();
-    await tester.tap(find.text('Next'));
-    await tester.pump();
+    expect(find.byKey(const ValueKey('neighbor-example')), findsOneWidget);
+    expect(find.textContaining('all 8 neighboring patches'), findsOneWidget);
     expect(find.text('Play'), findsOneWidget);
     expect(find.text('Next'), findsNothing);
     await tester.tap(find.text('Play'));
@@ -116,20 +115,16 @@ void main() {
     expect(escStore.seen, isTrue);
   });
 
-  testWidgets('keyboard arrows and Enter step through the overlay', (
+  testWidgets('arrows keep the short card open and Enter starts play', (
     tester,
   ) async {
     final store = _FakeStore();
     await _pump(tester, store);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump();
-    expect(find.text('Play'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
-    expect(find.text('Next'), findsOneWidget);
+    expect(find.text('How to play'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
     expect(find.text('How to play'), findsNothing);
     expect(store.seen, isTrue);
@@ -164,7 +159,7 @@ void main() {
     await tester.tap(find.byTooltip('How to play'));
     await tester.pump();
     expect(find.text('How to play'), findsOneWidget);
-    await tester.tap(find.text('Next'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     await tester.tap(find.byTooltip('How to play'), warnIfMissed: false);
     await tester.pump();
@@ -181,7 +176,7 @@ void main() {
 
     await tester.tap(find.byTooltip('How to play'));
     await tester.pump();
-    expect(find.text('Next'), findsOneWidget);
+    expect(find.text('Play'), findsOneWidget);
     expect(find.text('0:12'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -272,7 +267,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
     // Ctrl+Enter, F5 did not advance or close the card.
-    expect(find.text('Next'), findsOneWidget);
+    expect(find.text('Play'), findsOneWidget);
     expect(find.text('How to play'), findsOneWidget);
   });
 

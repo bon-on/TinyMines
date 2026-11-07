@@ -11,6 +11,7 @@ class RunResult {
     required this.seconds,
     required this.revealedFraction,
     this.dailyDay,
+    this.practice = false,
   });
 
   final Difficulty difficulty;
@@ -24,6 +25,9 @@ class RunResult {
 
   /// Day key ([DailyChallenge.dayKey]) when this was the daily board.
   final String? dailyDay;
+
+  /// A replay for learning; never changes persisted results or rewards.
+  final bool practice;
 
   bool get isDaily => dailyDay != null;
 }
@@ -141,6 +145,7 @@ class GardenProgress {
   /// XP for [run]. The daily bonus only applies when [dailyBonus] (the day's
   /// result is being recorded now).
   static int xpForRun(RunResult run, {bool dailyBonus = true}) {
+    if (run.practice) return 0;
     final base = winXp(run.difficulty);
     var xp = run.won
         ? base
@@ -210,6 +215,19 @@ class GardenProgress {
 
   RunOutcome applyRun(RunResult run) {
     final levelBefore = level;
+    if (run.practice || (run.isDaily && daily.containsKey(run.dailyDay))) {
+      return RunOutcome(
+        progress: this,
+        xpGained: 0,
+        isNewBest: false,
+        previousBest: null,
+        levelBefore: levelBefore,
+        levelAfter: levelBefore,
+        newlyUnlockedThemes: const [],
+        dailyRecorded: false,
+        streak: streak,
+      );
+    }
     final name = run.difficulty.name;
     final previousBest = run.isDaily ? null : bestTimes[name];
     final xp = xpForRun(

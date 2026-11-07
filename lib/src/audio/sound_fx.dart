@@ -240,7 +240,7 @@ class SoundFx extends ChangeNotifier {
 
   /// Fire-and-forget; silent when muted, never throws.
   void play(Sfx sfx) {
-    if (_disposed || muted) return;
+    if (_disposed || !_appVisible || muted) return;
     try {
       _player.play(sfx.asset, _volume);
     } catch (_) {}

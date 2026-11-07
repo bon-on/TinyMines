@@ -145,8 +145,8 @@ void main() {
       expect(again.dailyRecorded, isFalse);
       expect(
         again.xpGained,
-        lessThan(GardenProgress.dailyPlayXp + 3),
-        reason: 'no daily bonus for a day already recorded',
+        0,
+        reason: 'a recorded day cannot award base XP or daily bonuses again',
       );
       expect(again.progress.daily.length, 3);
       expect(p.dailyResult(d3)!.won, isFalse);
@@ -160,6 +160,44 @@ void main() {
   });
 
   group('persistence', () {
+    test('practice cannot change any saved result, even after reload', () {
+      final original = const GardenProgress.initial()
+          .applyRun(
+            const RunResult(
+              difficulty: Difficulty.normal,
+              won: false,
+              seconds: 42,
+              revealedFraction: 0.2,
+              dailyDay: '2026-11-06',
+            ),
+          )
+          .progress;
+      var progress = GardenProgress.fromJson(original.toJson());
+      for (final won in [true, false, true]) {
+        final run = RunResult(
+          difficulty: Difficulty.normal,
+          won: won,
+          seconds: 1,
+          revealedFraction: 1,
+          dailyDay: '2026-11-06',
+          practice: true,
+        );
+        expect(GardenProgress.xpForRun(run), 0);
+        final result = progress.applyRun(run);
+        expect(identical(result.progress, progress), isTrue);
+        expect(result.xpGained, 0);
+        expect(result.isNewBest, isFalse);
+        expect(result.dailyRecorded, isFalse);
+        progress = result.progress;
+      }
+      expect(progress.toJson(), original.toJson());
+      final nextDay = progress.applyRun(
+        _win(Difficulty.normal, 30, day: '2026-11-07'),
+      );
+      expect(nextDay.dailyRecorded, isTrue);
+      expect(nextDay.xpGained, greaterThan(0));
+      expect(nextDay.streak, 2);
+    });
     test('json round trip', () {
       final p = const GardenProgress.initial()
           .applyRun(_win(Difficulty.hard, 200))

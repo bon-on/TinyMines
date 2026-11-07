@@ -10,7 +10,6 @@ import 'platform/game_platform.dart';
 import 'result_registration.dart';
 import 'src/art/garden_palette.dart';
 import 'src/art/garden_scenery.dart';
-import 'src/art/garden_tile_art.dart';
 import 'src/audio/sound_fx.dart';
 import 'src/game/difficulty.dart';
 import 'src/meta/daily_challenge.dart';
@@ -74,18 +73,8 @@ const int _hintPenaltySeconds = 10;
 const List<TutorialStep> _tutorialSteps = [
   TutorialStep(
     Icons.grid_view,
-    'Dig up every safe patch without waking a mole. A pebble counts the moles around it.',
-    art: TileLook.soil,
-    nearby: 2,
-  ),
-  TutorialStep(
-    Icons.flag,
-    'Tap or click to dig. Long press or right-click to plant a flag on a mole.',
-    art: TileLook.flagged,
-  ),
-  TutorialStep(
-    Icons.lightbulb,
-    'Tap a pebble with all its flags placed to dig the rest. Hints cost +${_hintPenaltySeconds}s.',
+    'Numbers count moles in all 8 neighboring patches. Dig the safe ones; use Flag for danger.',
+    neighborExample: true,
   ),
 ];
 
@@ -143,6 +132,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   // Gameplay events wait until the first-run tutorial check has answered.
   bool _tutorialChecked = false;
   bool _gameplayActive = false;
+  bool _appActive = true;
+  bool _flagMode = false;
+  String? _boardFeedback;
+  Timer? _feedbackTimer;
   late final SoundFx _sound =
       widget.soundFx ?? SoundFx(platform: widget.platform);
   late final AppLifecycleListener _lifecycle;
@@ -153,6 +146,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// Daily board in play: its day key; null for a regular board.
   String? _dailyDay;
+  bool _dailyPractice = false;
 
   /// The mole that ended the run, drawn startled.
   int? _hitIndex;
@@ -186,12 +180,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     super.initState();
     _sound.addListener(_onSoundChanged);
     if (widget.soundFx == null) _sound.load();
-    _lifecycle = AppLifecycleListener(
-      onStateChange: (state) => _sound.setAppVisible(
-        state == AppLifecycleState.resumed ||
-            state == AppLifecycleState.inactive,
-      ),
-    );
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _appActive = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    _sound.setAppVisible(_appActive);
+    _lifecycle = AppLifecycleListener(onStateChange: _onLifecycleChanged);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     widget.platform.setAudioMuteListener(_sound.refreshMute);
     _sound.startMusic();
@@ -272,7 +264,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// running only after the tutorial check, while no overlay is open and the
   /// field is not finished.
   void _syncGameplay() {
-    final wantActive = _tutorialChecked && !_overlayOpen && !_over;
+    final wantActive =
+        _appActive && _tutorialChecked && !_overlayOpen && !_over;
     if (wantActive == _gameplayActive) return;
     _gameplayActive = wantActive;
     try {
@@ -313,7 +306,20 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _resumeClock() {
-    if (_runStarted && !_over && !_overlayOpen) _startTimer();
+    if (_appActive && _runStarted && !_over && !_overlayOpen) _startTimer();
+  }
+
+  void _onLifecycleChanged(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (_appActive == active) return;
+    setState(() => _appActive = active);
+    _sound.setAppVisible(active);
+    if (active) {
+      _resumeClock();
+    } else {
+      _stopTimer();
+    }
+    _syncGameplay();
   }
 
   void _onSoundChanged() {
@@ -329,6 +335,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _sound.stopMusic();
     if (widget.soundFx == null) _sound.dispose();
     _timer?.cancel();
+    _feedbackTimer?.cancel();
     _fx.dispose();
     super.dispose();
   }
@@ -338,6 +345,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _clock.reset();
     _hintPenalty = 0;
     _moves = 0;
+    _flagMode = false;
+    _clearFeedback();
     _runStarted = false;
     _hitIndex = null;
     _report = null;
@@ -350,10 +359,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   void _restart() {
     _resetRunState();
     _dailyDay = null;
+    _dailyPractice = false;
     _field = MineField(
       size: _difficulty.size,
       mineCount: _difficulty.mines,
       random: widget.random,
+      requireLogicalSolution: _difficulty == Difficulty.easy,
     );
     _hints = _difficulty.hints;
     setState(() {});
@@ -361,13 +372,30 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _startDaily() {
+    if (!_progressLoaded) return;
     final today = _today;
-    if (_progress.dailyResult(today) != null) return;
+    if (_progress.dailyResult(today) != null) {
+      _startDailyPractice(DailyChallenge.dayKey(today));
+      return;
+    }
+    _loadDailyBoard(today, practice: false);
+  }
+
+  void _startDailyPractice(String day) {
+    final date = DailyChallenge.parseDay(day);
+    if (!_progressLoaded || date == null || !_progress.daily.containsKey(day)) {
+      return;
+    }
+    _loadDailyBoard(date, practice: true);
+  }
+
+  void _loadDailyBoard(DateTime day, {required bool practice}) {
     _resetRunState();
     _gardenOpen = false;
-    final (field, start) = DailyChallenge.build(today);
+    final (field, start) = DailyChallenge.build(day);
     _field = field;
-    _dailyDay = DailyChallenge.dayKey(today);
+    _dailyDay = DailyChallenge.dayKey(day);
+    _dailyPractice = practice;
     _hints = DailyChallenge.difficulty.hints;
     _fx.reveal(
       _wave(start, [
@@ -380,6 +408,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _startTimer() {
+    if (!_appActive || _overlayOpen || _over || !_runStarted) return;
     _clock.start();
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
@@ -419,10 +448,32 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   void _tapCell(int index) {
     if (!_tutorialChecked) {
-      _pendingTap = (index, false);
+      _pendingTap = (index, _flagMode);
       return;
     }
-    if (_over) return;
+    if (!_appActive || _overlayOpen || _summaryOpen || _over) return;
+    if (_flagMode) {
+      _toggleFlag(index);
+      return;
+    }
+    final cell = _field.cells[index];
+    if (cell.flagged) {
+      _showFeedback('Switch to Flag to remove this marker.');
+      return;
+    }
+    if (cell.revealed && cell.nearby > 0) {
+      final placed = _field
+          .neighbors(index)
+          .where((n) => _field.cells[n].flagged)
+          .length;
+      if (placed != cell.nearby) {
+        _showFeedback(
+          'This ${cell.nearby} needs ${cell.nearby} flags ($placed placed).',
+        );
+        return;
+      }
+    }
+    _clearFeedback();
     final before = _revealedSnapshot();
     final outcome = _field.cells[index].revealed
         ? _field.chord(index)
@@ -497,14 +548,17 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       seconds: seconds,
       revealedFraction: safe == 0 ? 1 : dug / safe,
       dailyDay: _dailyDay,
+      practice: _dailyPractice,
     );
     final outcome = _progress.applyRun(run);
-    _progress = outcome.progress;
-    if (_progressLoaded) {
-      unawaited(_saveProgress());
-    } else {
-      // Saving now could overwrite the stored value; merge after loading.
-      _pendingRuns.add(run);
+    if (!identical(_progress, outcome.progress)) {
+      _progress = outcome.progress;
+      if (_progressLoaded) {
+        unawaited(_saveProgress());
+      } else {
+        // Saving now could overwrite the stored value; merge after loading.
+        _pendingRuns.add(run);
+      }
     }
     setState(() {
       _report = RunReport(
@@ -512,6 +566,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         difficulty: _boardDifficulty,
         seconds: seconds,
         daily: _dailyDay != null,
+        practice: _dailyPractice,
         outcome: outcome,
       );
       _summaryOpen = true;
@@ -552,7 +607,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _pendingTap = (index, true);
       return;
     }
+    if (!_appActive || _overlayOpen || _summaryOpen) return;
     if (!_field.toggleFlag(index)) return;
+    _clearFeedback();
     _sound.play(Sfx.flag);
     _fx.flag(index, planted: _field.cells[index].flagged);
     setState(() {});
@@ -576,7 +633,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _useHint() {
-    if (_hints == 0) return;
+    if (!_appActive || _overlayOpen || _summaryOpen || _hints == 0) return;
+    _clearFeedback();
     final candidate = _field.hintCandidate();
     if (candidate == null) return;
     _hints--;
@@ -603,10 +661,64 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   String get _status {
     if (_lost) return 'You dug up a mole! Try a cleaner dig.';
     if (_won) return 'Field cleared in ${formatTime(_elapsedSeconds)}.';
+    if (_boardFeedback != null) return _boardFeedback!;
     if (_dailyDay != null) {
-      return 'Daily garden for ${formatDay(_today)}: one try, same board for everyone.';
+      final date = DailyChallenge.parseDay(_dailyDay!)!;
+      return _dailyPractice
+          ? 'Practice for ${formatDay(date)} - no XP or records. Your daily result is saved.'
+          : 'Daily garden for ${formatDay(date)}: one scored try, same board for everyone.';
     }
-    return 'Tap to dig. Long press or right-click to flag. Tap a pebble to clear around it.';
+    if (!_field.armed) return 'Start anywhere - your first dig is safe.';
+    return _flagMode
+        ? 'Flag mode: tap a hidden patch to mark or remove a flag.'
+        : 'Dig mode: tap to dig. Numbers count moles in all 8 neighbors.';
+  }
+
+  void _clearFeedback() {
+    _feedbackTimer?.cancel();
+    _feedbackTimer = null;
+    _boardFeedback = null;
+  }
+
+  void _showFeedback(String message) {
+    _clearFeedback();
+    setState(() => _boardFeedback = message);
+    _feedbackTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _boardFeedback = null);
+    });
+  }
+
+  void _setFlagMode(bool flag) {
+    if (_flagMode == flag) return;
+    _clearFeedback();
+    setState(() => _flagMode = flag);
+  }
+
+  Widget _modeControls(GardenPalette palette) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Row(
+        children: [
+          for (final flag in [false, true]) ...[
+            if (flag) const SizedBox(width: 8),
+            Expanded(
+              child: Semantics(
+                key: ValueKey(flag ? 'flag-mode' : 'dig-mode'),
+                selected: _flagMode == flag,
+                child: GardenButton(
+                  palette: palette,
+                  label: flag ? 'Flag' : 'Dig',
+                  icon: flag ? Icons.flag_rounded : Icons.touch_app_rounded,
+                  primary: _flagMode == flag,
+                  height: 40,
+                  onPressed: _over ? null : () => _setFlagMode(flag),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -632,6 +744,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 palette: palette,
                 delay: Duration(milliseconds: report.won ? 950 : 800),
                 onPlayAgain: _restart,
+                onPractice: report.daily && _dailyDay != null
+                    ? () => _startDailyPractice(_dailyDay!)
+                    : null,
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
                 onNext:
@@ -671,7 +786,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// tutorial cannot open on top of a half-started game. (The board keeps
   /// its own gate: it remembers a tap instead of dropping it.)
   Widget _gate(Widget child) =>
-      AbsorbPointer(absorbing: !_tutorialChecked, child: child);
+      AbsorbPointer(absorbing: !_appActive || !_tutorialChecked, child: child);
 
   Widget _buildGame(BuildContext context, GardenPalette palette) {
     return Scaffold(
@@ -879,6 +994,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+              _gate(_modeControls(palette)),
+              const SizedBox(height: 6),
               Expanded(child: _board(palette)),
               const SizedBox(height: 8),
               _statusArea(palette),
@@ -929,12 +1046,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             flex: 2,
             child: GardenButton(
               palette: palette,
-              label: dailyDone ? 'Daily done' : 'Daily',
+              label: dailyDone ? 'Practice daily' : 'Daily',
               icon: dailyDone
                   ? Icons.check_rounded
                   : Icons.calendar_today_rounded,
               height: 40,
-              onPressed: dailyDone || _dailyDay != null ? null : _startDaily,
+              onPressed: !_progressLoaded || (_dailyDay != null && !_over)
+                  ? null
+                  : _startDaily,
             ),
           ),
           const SizedBox(width: 6),
@@ -1049,7 +1168,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+                _gate(_modeControls(palette)),
+                const SizedBox(height: 8),
                 Expanded(child: _board(palette)),
                 const SizedBox(height: 8),
                 _statusArea(palette),

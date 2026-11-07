@@ -232,13 +232,13 @@ class DailyCard extends StatelessWidget {
         GardenButton(
           palette: palette,
           label: result != null
-              ? 'Done for today'
+              ? 'Practice daily'
               : (playing ? 'Playing daily' : 'Play daily'),
           icon: result != null
               ? Icons.check_rounded
               : Icons.calendar_today_rounded,
           height: 42,
-          onPressed: result == null && !playing ? onPlay : null,
+          onPressed: !playing ? onPlay : null,
         ),
       ],
     );
@@ -369,6 +369,9 @@ class _GardenOverlayState extends State<GardenOverlay> {
     if (key != LogicalKeyboardKey.escape &&
         key != LogicalKeyboardKey.enter &&
         key != LogicalKeyboardKey.numpadEnter) {
+      return KeyEventResult.ignored;
+    }
+    if (key != LogicalKeyboardKey.escape && !_focus.hasPrimaryFocus) {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent) widget.onClose();
