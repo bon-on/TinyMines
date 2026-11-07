@@ -17,7 +17,9 @@ TileLook lookFor(MineField field, int index, {required int? hitIndex}) {
     return TileLook.covered;
   }
   if (cell.mine) {
-    if (index == hitIndex) return TileLook.moleHit;
+    if (index == hitIndex || field.blasted.contains(index)) {
+      return TileLook.moleHit;
+    }
     return cell.flagged ? TileLook.flaggedMole : TileLook.mole;
   }
   return TileLook.soil;
@@ -111,7 +113,9 @@ class GardenBoard extends StatelessWidget {
                   look: look,
                   nearby: cell.nearby,
                   seed: index,
-                  interactive: !gameOver && (!cell.revealed || cell.nearby > 0),
+                  interactive:
+                      !gameOver &&
+                      (!cell.revealed || (cell.nearby > 0 && !cell.mine)),
                   onTap: () => onTap(index),
                   onFlag: () => onFlag(index),
                 );

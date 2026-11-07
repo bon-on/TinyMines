@@ -11,19 +11,40 @@ import 'garden_ui.dart';
 class RunReport {
   const RunReport({
     required this.won,
-    required this.difficulty,
+    required Difficulty this.difficulty,
     required this.seconds,
     required this.outcome,
     this.daily = false,
     this.practice = false,
-  });
+  }) : stageReached = null,
+       stagesCleared = 0;
+
+  /// End of a Garden Run: [seconds] is the whole run, [won] means at least
+  /// one board was cleared.
+  const RunReport.garden({
+    required this.stageReached,
+    required this.stagesCleared,
+    required this.seconds,
+    required this.outcome,
+  }) : won = stagesCleared > 0,
+       difficulty = null,
+       daily = false,
+       practice = false;
 
   final bool won;
-  final Difficulty difficulty;
+
+  /// The board's preset; null for a Garden Run.
+  final Difficulty? difficulty;
   final int seconds;
   final bool daily;
   final bool practice;
   final RunOutcome outcome;
+
+  /// Garden Run only: the stage the run ended on and the boards cleared.
+  final int? stageReached;
+  final int stagesCleared;
+
+  bool get garden => stageReached != null;
 }
 
 /// End-of-run card: result, time, best, "New best!", XP with the level bar,
@@ -38,6 +59,7 @@ class RunSummaryOverlay extends StatefulWidget {
     required this.onPlayAgain,
     required this.onClose,
     this.onNext,
+    this.nextLabel,
     this.onPractice,
     this.onShown,
     this.delay = const Duration(milliseconds: 750),
@@ -48,8 +70,10 @@ class RunSummaryOverlay extends StatefulWidget {
   final VoidCallback onPlayAgain;
   final VoidCallback onClose;
 
-  /// Next harder difficulty; null hides the button.
+  /// Next harder difficulty (or, after a Garden Run, the normal board); null
+  /// hides the button.
   final VoidCallback? onNext;
+  final String? nextLabel;
   final VoidCallback? onPractice;
 
   /// Called once when the card has popped in (for the reward sound).
@@ -187,15 +211,22 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
   Widget _content(GardenPalette palette) {
     final report = widget.report;
     final outcome = report.outcome;
-    final title = report.won
+    final garden = report.garden;
+    final title = garden
+        ? 'Run over!'
+        : report.won
         ? (report.daily ? 'Daily garden cleared!' : 'Garden cleared!')
         : 'Bonk! A mole!';
-    final subtitle = report.practice
+    final subtitle = garden
+        ? 'Garden Run - stage ${report.stageReached} reached'
+        : report.practice
         ? 'Daily practice - unscored'
         : report.daily
         ? 'Daily Garden'
-        : report.difficulty.title;
-    final best = outcome.progress.bestTime(report.difficulty);
+        : report.difficulty!.title;
+    final best = garden || report.difficulty == null
+        ? null
+        : outcome.progress.bestTime(report.difficulty!);
     final level = outcome.progress;
     // Bar fills from the old XP to the new XP.
     final barT = _phase(0.3, 0.75);
@@ -234,35 +265,67 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
           ),
         ),
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: StatTile(
-                palette: palette,
-                label: 'TIME',
-                value: report.won ? formatTime(report.seconds) : '--',
-                large: true,
+        if (garden)
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  palette: palette,
+                  label: 'STAGE',
+                  value: '${report.stageReached}',
+                  large: true,
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: StatTile(
-                palette: palette,
-                label: report.daily ? 'STREAK' : 'BEST',
-                value: report.daily
-                    ? '${outcome.streak} d'
-                    : (best == null ? '--' : formatTime(best)),
-                large: true,
+              const SizedBox(width: 10),
+              Expanded(
+                child: StatTile(
+                  palette: palette,
+                  label: 'CLEARED',
+                  value: '${report.stagesCleared}',
+                  large: true,
+                ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: StatTile(
+                  palette: palette,
+                  label: 'TIME',
+                  value: formatTime(report.seconds),
+                  large: true,
+                ),
+              ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  palette: palette,
+                  label: 'TIME',
+                  value: report.won ? formatTime(report.seconds) : '--',
+                  large: true,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: StatTile(
+                  palette: palette,
+                  label: report.daily ? 'STREAK' : 'BEST',
+                  value: report.daily
+                      ? '${outcome.streak} d'
+                      : (best == null ? '--' : formatTime(best)),
+                  large: true,
+                ),
+              ),
+            ],
+          ),
         if (outcome.isNewBest) ...[
           const SizedBox(height: 10),
           Transform.scale(
             scale: _phase(0.2, 0.4, Curves.elasticOut),
             child: _Pill(
-              text: 'New best!',
+              text: garden ? 'New best stage!' : 'New best!',
               color: palette.flowerCenter,
               textColor: const Color(0xFF3B2A05),
             ),
@@ -364,7 +427,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
             Expanded(
               child: GardenButton(
                 palette: palette,
-                label: 'New Field',
+                label: garden ? 'New Run' : 'New Field',
                 icon: Icons.refresh_rounded,
                 focusNode: _playAgainFocus,
                 onPressed: widget.onPlayAgain,
@@ -375,7 +438,9 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
               Expanded(
                 child: GardenButton(
                   palette: palette,
-                  label: 'Next: ${report.difficulty.next!.label}',
+                  label:
+                      widget.nextLabel ??
+                      'Next: ${report.difficulty!.next!.label}',
                   primary: false,
                   onPressed: widget.onNext,
                 ),

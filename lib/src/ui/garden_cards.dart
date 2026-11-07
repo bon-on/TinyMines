@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
 import '../game/difficulty.dart';
+import '../game/garden_run.dart';
 import '../meta/garden_progress.dart';
 import '../meta/garden_theme.dart';
 import 'garden_ui.dart';
@@ -241,6 +242,144 @@ class DailyCard extends StatelessWidget {
           onPressed: !playing ? onPlay : null,
         ),
       ],
+    );
+  }
+}
+
+/// Entry card for Garden Run: what it is, the best stage and a start button.
+class GardenRunCard extends StatelessWidget {
+  const GardenRunCard({
+    super.key,
+    required this.palette,
+    required this.progress,
+    required this.playing,
+    required this.onStart,
+  });
+
+  final GardenPalette palette;
+  final GardenProgress progress;
+
+  /// A run is on the table right now (the button restarts it).
+  final bool playing;
+
+  /// Null while the saved progress is still loading.
+  final VoidCallback? onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final best = progress.bestRunStage;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(child: PanelCaption('Garden Run', palette: palette)),
+            Icon(Icons.favorite_rounded, size: 16, color: palette.danger),
+            const SizedBox(width: 3),
+            Text(
+              best > 0 ? 'Best stage $best' : 'No run yet',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+                color: palette.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Clear bigger and bigger gardens on ${GardenRun.startHearts} hearts.',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: palette.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GardenButton(
+          palette: palette,
+          label: playing ? 'Restart run' : 'Start Garden Run',
+          icon: playing ? Icons.refresh_rounded : Icons.play_arrow_rounded,
+          height: 44,
+          onPressed: onStart,
+        ),
+      ],
+    );
+  }
+}
+
+/// Live status of a Garden Run: stage, hearts and the run clock. A boss stage
+/// gets a highlighted tag.
+class GardenRunHud extends StatelessWidget {
+  const GardenRunHud({
+    super.key,
+    required this.palette,
+    required this.stage,
+    required this.hearts,
+    required this.runSeconds,
+  });
+
+  final GardenPalette palette;
+  final GardenStage stage;
+  final int hearts;
+  final int runSeconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = TextStyle(
+      fontWeight: FontWeight.w900,
+      fontSize: 15,
+      color: palette.textPrimary,
+    );
+    // Scales down instead of overflowing on the narrowest screens.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Stage ${stage.stage}', style: text),
+          const SizedBox(width: 10),
+          Semantics(
+            label: 'Hearts: $hearts of ${GardenRun.maxHearts}',
+            child: Row(
+              key: const ValueKey('run-hearts'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < GardenRun.maxHearts; i++)
+                  Icon(
+                    i < hearts
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    size: 24,
+                    color: palette.danger,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text('Run ${formatTime(runSeconds)}', style: text),
+          if (stage.boss) ...[
+            const SizedBox(width: 10),
+            Container(
+              key: const ValueKey('boss-tag'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: palette.flowerCenter,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'BOSS',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: Color(0xFF3B2A05),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

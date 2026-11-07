@@ -14,6 +14,12 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   Night (Lv10).
 - Daily garden: one Normal board per local day, the same for everyone, with a
   starting patch already dug. One result per day; finished days build a streak.
+- Garden Run: one run over ever bigger boards (5x5 up to 12x12) with 3 hearts.
+  A mole costs a heart instead of ending the board, boss gardens (stages 5 and
+  10) win a heart back, hints are shared (3, +1 per 3 clears, max 5) and the
+  next stage starts by itself. XP is paid once when the run ends (15 per
+  cleared board + 10 for taking part); `runsPlayed` and `bestRunStage` are
+  saved in `garden_progress_v1`. Normal records and the daily are untouched.
 - Every finished run opens a summary (time, best, New best!, XP, level bar,
   unlocks). Enter plays again, Escape shows the board.
 

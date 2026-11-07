@@ -12,6 +12,7 @@ import 'src/art/garden_palette.dart';
 import 'src/art/garden_scenery.dart';
 import 'src/audio/sound_fx.dart';
 import 'src/game/difficulty.dart';
+import 'src/game/garden_run.dart';
 import 'src/meta/daily_challenge.dart';
 import 'src/meta/garden_progress.dart';
 import 'src/meta/garden_progress_store.dart';
@@ -151,6 +152,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// The mole that ended the run, drawn startled.
   int? _hitIndex;
 
+  /// Garden Run in play; it stays set after the run ended so the board can
+  /// still be viewed. Null on regular and daily boards.
+  GardenRunState? _run;
+  bool _runFinalized = false;
+
+  /// The player dug at least one patch in this run (earns participation XP).
+  bool _runParticipated = false;
+
+  /// Time of the stages already cleared in this run.
+  int _runBankedMs = 0;
+
+  /// The stage was just cleared; the next one starts after a short pause.
+  bool _stageDone = false;
+  Timer? _advanceTimer;
+
   /// A board tap made while the tutorial check was pending:
   /// (cell, isFlag). Applied once the check answers "seen".
   (int, bool)? _pendingTap;
@@ -172,6 +188,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   bool get _lost => _field.lost;
   bool get _won => _field.won;
   bool get _over => _lost || _won;
+
+  /// The portal sees a Garden Run as one play session: a cleared stage does
+  /// not stop gameplay, only the end of the run does.
+  bool get _portalOver => _run != null ? _lost : _over;
+  int get _runSeconds => (_runBankedMs + _clock.elapsedMilliseconds) ~/ 1000;
+  int get _hintsLeft => _run?.hints ?? _hints;
+  double get _gap => _field.size > 10 ? 3 : 4;
   GardenPalette get _palette => GardenPalette.of(_progress.selectedTheme);
   DateTime get _today => (widget.now ?? DateTime.now)();
 
@@ -265,7 +288,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// field is not finished.
   void _syncGameplay() {
     final wantActive =
-        _appActive && _tutorialChecked && !_overlayOpen && !_over;
+        _appActive && _tutorialChecked && !_overlayOpen && !_portalOver;
     if (wantActive == _gameplayActive) return;
     _gameplayActive = wantActive;
     try {
@@ -336,6 +359,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (widget.soundFx == null) _sound.dispose();
     _timer?.cancel();
     _feedbackTimer?.cancel();
+    _advanceTimer?.cancel();
     _fx.dispose();
     super.dispose();
   }
@@ -349,6 +373,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _clearFeedback();
     _runStarted = false;
     _hitIndex = null;
+    _stageDone = false;
+    _advanceTimer?.cancel();
+    _advanceTimer = null;
     _report = null;
     _offerRegistrationFor = null;
     _summaryOpen = false;
@@ -357,6 +384,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// New regular board at the current difficulty (leaves the daily board).
   void _restart() {
+    _leaveRun();
     _resetRunState();
     _dailyDay = null;
     _dailyPractice = false;
@@ -390,6 +418,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _loadDailyBoard(DateTime day, {required bool practice}) {
+    _leaveRun();
     _resetRunState();
     _gardenOpen = false;
     final (field, start) = DailyChallenge.build(day);
@@ -405,6 +434,84 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
     setState(() {});
     _syncGameplay();
+  }
+
+  /// Starts a fresh Garden Run at stage 1 (ending any run in play).
+  void _startGardenRun() {
+    if (!_progressLoaded) return;
+    _leaveRun();
+    _dailyDay = null;
+    _dailyPractice = false;
+    _run = const GardenRunState();
+    _runFinalized = false;
+    _runParticipated = false;
+    _runBankedMs = 0;
+    _loadStage();
+  }
+
+  void _loadStage() {
+    final config = _run!.config;
+    _resetRunState();
+    _field = MineField(
+      size: config.size,
+      mineCount: config.mines,
+      random: widget.random,
+      requireLogicalSolution: config.fairStart,
+      survivable: true,
+    );
+    setState(() {});
+    _syncGameplay();
+  }
+
+  void _advanceStage() {
+    if (_run == null || !_stageDone) return;
+    _runBankedMs += _clock.elapsedMilliseconds;
+    _loadStage();
+  }
+
+  void _stageCleared() {
+    _run = _run!.clearStage();
+    _stageDone = true;
+    _advanceTimer?.cancel();
+    _advanceTimer = Timer(const Duration(milliseconds: 1800), _advanceStage);
+  }
+
+  /// Going to a regular or daily board (or restarting) ends the run now.
+  void _leaveRun() {
+    if (_run == null) return;
+    _finalizeRun(showSummary: false);
+    _run = null;
+  }
+
+  /// Ends the run once: XP and records are applied here and nowhere else.
+  void _finalizeRun({required bool showSummary}) {
+    final run = _run;
+    if (run == null || _runFinalized) return;
+    _runFinalized = true;
+    _advanceTimer?.cancel();
+    _advanceTimer = null;
+    final reached = _stageDone ? run.stage - 1 : run.stage;
+    final outcome = _progress.applyGardenRun(
+      GardenRunResult(
+        stageReached: reached,
+        stagesCleared: run.cleared,
+        participated: _runParticipated,
+      ),
+    );
+    if (!identical(_progress, outcome.progress)) {
+      _progress = outcome.progress;
+      unawaited(_saveProgress());
+    }
+    if (!showSummary) return;
+    setState(() {
+      _report = RunReport.garden(
+        stageReached: reached,
+        stagesCleared: run.cleared,
+        seconds: _runSeconds,
+        outcome: outcome,
+      );
+      _summaryOpen = true;
+    });
   }
 
   void _startTimer() {
@@ -457,6 +564,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       return;
     }
     final cell = _field.cells[index];
+    if (cell.revealed && cell.mine) return;
     if (cell.flagged) {
       _showFeedback('Switch to Flag to remove this marker.');
       return;
@@ -481,6 +589,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (outcome == RevealOutcome.none) return;
     if (!_runStarted) {
       _runStarted = true;
+      if (_run != null) _runParticipated = true;
       _startTimer();
     }
     _moves++;
@@ -488,11 +597,19 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _afterReveal(int origin, List<bool> before) {
+    final run = _run;
+    final blasts = run == null ? const <int>[] : _field.lastBlasts.toList();
+    if (run != null && blasts.isNotEmpty) {
+      _run = run.loseHearts(blasts.length);
+      if (_run!.isOver) _field.exhaust();
+    }
     _sound.play(
       _lost
           ? Sfx.boom
           : _won
           ? Sfx.win
+          : blasts.isNotEmpty
+          ? Sfx.boom
           : Sfx.reveal,
     );
     if (_over) _stopTimer();
@@ -501,7 +618,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         if (_field.cells[i].revealed && !before[i] && !_field.cells[i].mine) i,
     ];
     if (_lost) {
-      _hitIndex = _findHit(origin);
+      _hitIndex = blasts.isNotEmpty ? blasts.last : _findHit(origin);
       final hit = _hitIndex ?? origin;
       _fx.reveal(_wave(origin, dug));
       _fx.blast(hit, [
@@ -511,10 +628,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       ]);
     } else {
       _fx.reveal(_wave(origin, dug));
+      for (final blast in blasts) {
+        _fx.blast(blast, const []);
+      }
       if (_won) {
         _fx.bloom([
           for (var i = 0; i < _field.cells.length; i++)
-            if (_field.cells[i].mine)
+            if (_field.cells[i].mine && !_field.blasted.contains(i))
               (
                 cell: i,
                 delayMs: 200 + math.min(900, _distance(origin, i) * 70),
@@ -522,9 +642,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         ]);
       }
     }
+    if (run != null && !_lost && _won) _stageCleared();
     setState(() {});
     _syncGameplay();
-    if (_over) _finishRun();
+    if (run != null) {
+      if (_lost) {
+        _finalizeRun(showSummary: true);
+      } else if (blasts.isNotEmpty) {
+        _showFeedback('A mole! You lost a heart (${_run!.hearts} left).');
+      }
+    } else if (_over) {
+      _finishRun();
+    }
   }
 
   /// The mole that was dug: the tapped cell, or for a chord the unflagged
@@ -616,7 +745,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _selectDifficulty(Difficulty difficulty) {
-    if (_difficulty == difficulty && _dailyDay == null) return;
+    if (_difficulty == difficulty && _dailyDay == null && _run == null) return;
     _difficulty = difficulty;
     _restart();
   }
@@ -633,14 +762,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _useHint() {
-    if (!_appActive || _overlayOpen || _summaryOpen || _hints == 0) return;
+    if (!_appActive || _overlayOpen || _summaryOpen || _hintsLeft == 0) return;
     _clearFeedback();
     final candidate = _field.hintCandidate();
     if (candidate == null) return;
-    _hints--;
-    _hintPenalty += _hintPenaltySeconds;
+    final run = _run;
+    if (run != null) {
+      // Run hints are shared by all stages and carry no time penalty.
+      _run = run.useHint();
+    } else {
+      _hints--;
+      _hintPenalty += _hintPenaltySeconds;
+    }
     if (!_runStarted) {
       _runStarted = true;
+      if (run != null) _runParticipated = true;
       _startTimer();
     }
     final before = _revealedSnapshot();
@@ -650,7 +786,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _playNext() {
-    final next = _report?.difficulty.next;
+    final next = _report?.difficulty?.next;
     if (next == null) return;
     _difficulty = next;
     _restart();
@@ -659,6 +795,26 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   void _closeSummary() => setState(() => _summaryOpen = false);
 
   String get _status {
+    final run = _run;
+    if (run != null) {
+      if (_lost) return 'Out of hearts! The run ends at stage ${run.stage}.';
+      if (_stageDone) {
+        final cleared = run.stage - 1;
+        return GardenRun.isBoss(cleared)
+            ? 'Boss garden cleared! +1 heart (max ${GardenRun.maxHearts}).'
+            : 'Stage $cleared cleared!';
+      }
+      if (_boardFeedback != null) return _boardFeedback!;
+      final boss = run.config.boss;
+      if (!_field.armed) {
+        return boss
+            ? 'Boss garden! Clear it to win a heart back. Your first dig is safe.'
+            : 'Stage ${run.stage}: start anywhere - your first dig is safe.';
+      }
+      return boss
+          ? 'Boss garden! A mole costs a heart; clearing it wins one back.'
+          : 'A mole costs a heart. Clear the stage to keep going.';
+    }
     if (_lost) return 'You dug up a mole! Try a cleaner dig.';
     if (_won) return 'Field cleared in ${formatTime(_elapsedSeconds)}.';
     if (_boardFeedback != null) return _boardFeedback!;
@@ -743,16 +899,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 report: report,
                 palette: palette,
                 delay: Duration(milliseconds: report.won ? 950 : 800),
-                onPlayAgain: _restart,
+                onPlayAgain: report.garden ? _startGardenRun : _restart,
                 onPractice: report.daily && _dailyDay != null
                     ? () => _startDailyPractice(_dailyDay!)
                     : null,
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
-                onNext:
-                    report.won &&
-                        !report.daily &&
-                        report.difficulty.next != null
+                nextLabel: report.garden ? 'Normal board' : null,
+                onNext: report.garden
+                    ? _restart
+                    : report.won &&
+                          !report.daily &&
+                          report.difficulty?.next != null
                     ? _playNext
                     : null,
               ),
@@ -858,26 +1016,32 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     GardenIconButton(
       palette: palette,
       icon: Icons.lightbulb,
-      tooltip: 'Reveal one safe tile (+${_hintPenaltySeconds}s)',
-      badge: _hints,
-      onPressed: _field.armed && !_over && _hints > 0 ? _useHint : null,
+      tooltip: _run != null
+          ? 'Reveal one safe tile'
+          : 'Reveal one safe tile (+${_hintPenaltySeconds}s)',
+      badge: _hintsLeft,
+      onPressed: _field.armed && !_over && _hintsLeft > 0 ? _useHint : null,
     ),
     GardenIconButton(
       palette: palette,
       icon: Icons.refresh,
-      tooltip: 'Restart',
-      onPressed: _restart,
+      tooltip: _run != null ? 'Restart run' : 'Restart',
+      onPressed: _run != null ? _startGardenRun : _restart,
     ),
   ];
 
   String get _bestText {
+    if (_run != null) {
+      final stage = _progress.bestRunStage;
+      return stage == 0 ? '--' : 'Stage $stage';
+    }
     if (_dailyDay != null) return '--';
     final best = _progress.bestTime(_difficulty);
     return best == null ? '--' : formatTime(best);
   }
 
   List<(String, String)> get _stats => [
-    ('Mines', '${_boardDifficulty.mines}'),
+    ('Mines', '${_run != null ? _field.mineCount : _boardDifficulty.mines}'),
     ('Flags', '${_field.flags}'),
     ('Time', formatTime(_elapsedSeconds)),
     ('Moves', '$_moves'),
@@ -896,7 +1060,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             field: _field,
             palette: palette,
             fx: _fx,
-            gap: _boardDifficulty.gap,
+            gap: _gap,
             hitIndex: _hitIndex,
             dimension: dimension,
             onTap: _tapCell,
@@ -933,10 +1097,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           const SizedBox(height: 8),
           GardenButton(
             palette: palette,
-            label: 'New Field',
-            icon: Icons.refresh,
+            label: _run == null
+                ? 'New Field'
+                : _stageDone
+                ? 'Next stage'
+                : 'New Run',
+            icon: _stageDone ? Icons.arrow_forward_rounded : Icons.refresh,
             height: 44,
-            onPressed: _restart,
+            onPressed: _run == null
+                ? _restart
+                : _stageDone
+                ? _advanceStage
+                : _startGardenRun,
           ),
         ],
       ],
@@ -989,10 +1161,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               _gate(
                 DifficultyPicker(
                   palette: palette,
-                  selected: _dailyDay == null ? _difficulty : null,
+                  selected: _dailyDay == null && _run == null
+                      ? _difficulty
+                      : null,
                   onChanged: _selectDifficulty,
                 ),
               ),
+              const SizedBox(height: 8),
+              _gate(_runStrip(palette)),
               const SizedBox(height: 8),
               _gate(_modeControls(palette)),
               const SizedBox(height: 6),
@@ -1005,6 +1181,41 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Narrow screens: the Garden Run entry button, or its live status.
+  Widget _runStrip(GardenPalette palette) {
+    final run = _run;
+    if (run == null) {
+      final best = _progress.bestRunStage;
+      return GardenButton(
+        palette: palette,
+        label: best > 0
+            ? 'Garden Run - best stage $best'
+            : 'Garden Run - ${GardenRun.startHearts} hearts',
+        icon: Icons.favorite_rounded,
+        height: 44,
+        onPressed: _progressLoaded ? _startGardenRun : null,
+      );
+    }
+    return SizedBox(
+      height: 44,
+      child: GardenPanel(
+        palette: palette,
+        radius: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Center(child: _runHud(palette, run)),
+      ),
+    );
+  }
+
+  Widget _runHud(GardenPalette palette, GardenRunState run) {
+    return GardenRunHud(
+      palette: palette,
+      stage: GardenRun.stage(_stageDone ? run.stage - 1 : run.stage),
+      hearts: run.hearts,
+      runSeconds: _runSeconds,
     );
   }
 
@@ -1126,6 +1337,16 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               const SizedBox(height: 12),
               GardenPanel(
                 palette: palette,
+                child: GardenRunCard(
+                  palette: palette,
+                  progress: _progress,
+                  playing: _run != null,
+                  onStart: _progressLoaded ? _startGardenRun : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              GardenPanel(
+                palette: palette,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1163,7 +1384,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     constraints: const BoxConstraints(maxWidth: 520),
                     child: DifficultyPicker(
                       palette: palette,
-                      selected: _dailyDay == null ? _difficulty : null,
+                      selected: _dailyDay == null && _run == null
+                          ? _difficulty
+                          : null,
                       onChanged: _selectDifficulty,
                     ),
                   ),
@@ -1180,6 +1403,17 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           const SizedBox(width: 18),
           _gate(
             _sideColumn(side, [
+              if (_run != null) ...[
+                GardenPanel(
+                  palette: palette,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: _runHud(palette, _run!),
+                ),
+                const SizedBox(height: 12),
+              ],
               GardenPanel(
                 palette: palette,
                 child: Column(
