@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'fair_easy_field.dart';
+
 class MineCell {
   bool mine = false;
   bool revealed = false;
@@ -11,12 +13,26 @@ enum RevealOutcome { none, safe, exploded }
 
 /// Board rules for Tiny Mines, kept free of widgets so they can be unit tested.
 class MineField {
-  MineField({required this.size, required this.mineCount, math.Random? random})
-    : _random = random ?? math.Random(),
-      cells = List.generate(size * size, (_) => MineCell());
+  MineField({
+    required this.size,
+    required this.mineCount,
+    math.Random? random,
+    this.requireLogicalSolution = false,
+  }) : _random = random ?? math.Random(),
+       cells = List.generate(size * size, (_) => MineCell()) {
+    if (requireLogicalSolution && (size != 6 || mineCount != 5)) {
+      throw ArgumentError(
+        'Logical generation is supported only for Easy 6x6/5',
+      );
+    }
+  }
 
   final int size;
   final int mineCount;
+
+  /// Regular Easy can opt into bounded, no-guess board selection. The default
+  /// path is unchanged for daily seeds and other difficulties.
+  final bool requireLogicalSolution;
   final math.Random _random;
   final List<MineCell> cells;
   bool _armed = false;
@@ -51,6 +67,10 @@ class MineField {
 
   /// Places mines away from [safeIndex] and its neighbors.
   void plantMines(int safeIndex) {
+    if (requireLogicalSolution) {
+      plantMinesAt(FairEasyField.generate(safeIndex, _random));
+      return;
+    }
     final blocked = {safeIndex, ...neighbors(safeIndex)};
     final candidates = [
       for (var i = 0; i < cells.length; i++)

@@ -82,8 +82,12 @@ void registerHintedWin() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     // Learn the mine layout the screen will get from the same seed.
-    final probe = MineField(size: 6, mineCount: 5, random: math.Random(1))
-      ..plantMines(0);
+    final probe = MineField(
+      size: 6,
+      mineCount: 5,
+      random: math.Random(1),
+      requireLogicalSolution: true,
+    )..plantMines(0);
     await tester.pumpWidget(
       MaterialApp(
         home: TinyMinesScreen(
