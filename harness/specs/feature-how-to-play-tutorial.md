@@ -21,8 +21,7 @@ with a way to skip it.
 
 ## Scope
 - On the first launch only, a "How to play" overlay card is shown over the
-  dimmed game. It has 3 short steps with an icon, page dots, a Skip button and
-  a Next button (Play on the last step).
+  dimmed game. The quality-recovery revision uses one short visual card showing all eight neighbors, with Skip and Play buttons; the reusable stepper still supports multiple steps.
 - Skip or Play closes it and stores `tutorial_seen_v1` (bool) in
   shared_preferences. Later launches go straight to the game.
 - A "?" (help_outline, tooltip "How to play") header button reopens it at step
@@ -38,7 +37,7 @@ with a way to skip it.
 
 ## Acceptance Criteria
 - Unset flag: overlay shown at launch and taps on tiles do nothing.
-- Next walks 3 steps; the last shows Play; Play closes and stores the flag.
+- The single visual card shows the eight-neighbor example and Play immediately; Play closes and stores the flag.
 - Skip and Escape close and store the flag.
 - Flag set: no overlay at launch.
 - "?" reopens at step 1 and the board, moves and clock are unchanged.
@@ -53,3 +52,7 @@ with a way to skip it.
 ## Evidence
 - flutter test
 - harness audit
+
+## Quality recovery revision
+
+`feature-crazygames-quality-recovery` replaces the original three-page first-run copy with one visual card and contextual in-game guidance; persistence, input isolation and clock behavior remain required.

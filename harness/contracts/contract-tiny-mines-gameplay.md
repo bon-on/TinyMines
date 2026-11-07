@@ -5,6 +5,8 @@ status: active
 related_specs:
   - feature-tiny-mines-gameplay
   - feature-retention-polish
+  - feature-daily-practice
+  - feature-crazygames-quality-recovery
 evidence_files:
   - reports/tiny-mines-gameplay-verification.md
 ---

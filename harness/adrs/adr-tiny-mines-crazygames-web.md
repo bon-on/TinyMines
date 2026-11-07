@@ -8,6 +8,8 @@ related_specs:
   - feature-sound-effects
   - feature-retention-polish
   - feature-crazygames-cloud-save
+  - feature-crazygames-quality-recovery
+  - feature-daily-practice
 ---
 
 # ADR: Build flag and platform adapter for CrazyGames

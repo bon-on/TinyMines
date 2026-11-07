@@ -96,3 +96,7 @@ platform"으로 거절했다. Tiny Mines도 회색 사각형 타일, Material �
 - `flutter build web --release --base-href /TinyMines/`, `tool/build_crazygames.sh`, `tool/build_gamepix.sh`
 - 임시 골든 테스트로 1280x720, 390x844, 결과 화면, 타일 아트를 PNG로 렌더링해 확인(테스트는 확인 후 삭제)
 - `node <harness-lab>/dist/index.js audit . --format md`
+
+## Quality recovery refinement
+
+`feature-crazygames-quality-recovery` supersedes the generation-preservation restriction for regular Easy only: dimensions/mine count and reveal/flag/chord rules are unchanged; Normal/Hard and fixed DailyChallenge layouts are preserved.
