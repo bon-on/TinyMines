@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-07",
+  "game": "Tiny Mines",
+  "existing_game_id": "fccd2987-6b5f-49b3-9b77-100fa62e336a",
+  "rejected_build": "a252f3a6-7c0f-4cc2-a772-60c014bd5e80",
+  "review_feedback": "The overall quality of the game does not yet meet the expectations of our platform",
+  "fixes": [
+    "solver-verified regular Easy fields",
+    "Dig/Flag touch controls",
+    "short visual eight-neighbor onboarding",
+    "visible-clue chord feedback",
+    "inactive clock/events/music/effects pause"
+  ],
+  "source_head": "67ff6496d5e4ab94d71ac46e7d2221405231a1d6",
+  "build_inputs_sha256": "777f9b8f1663c05960f77418081c0f9ede0c425856760b7f8aeb8a4e08aeb2cc",
+  "preexisting_daily_practice_preserved": true,
+  "verification": {
+    "vm_tests": 150,
+    "chrome_tests": 18,
+    "analyze": "pass",
+    "pages_build": "pass",
+    "crazygames_build": "pass",
+    "gamepix_build": "pass",
+    "audit_critical": 0,
+    "independent_review": "approve after Medium visibility-effect fix",
+    "native_vm_evidence": "TinyMines/build/quality-evidence/vm/checks.json"
+  },
+  "bundle": {
+    "file": "tiny-mines-crazygames.zip",
+    "sha256": "328264861c9c7186358020c1937c6f927e947de41abc0c9c2138abe1edb4383a",
+    "files": 45,
+    "uncompressed_bytes": 31210383
+  },
+  "settings": {
+    "launch": "Basic",
+    "progressSave": "Yes, using the Data Module from the CrazyGames SDK",
+    "mobile": true,
+    "orientation": "Portrait",
+    "sdkAudioMuting": true,
+    "multiplayer": false,
+    "ads": false
+  },
+  "portal_updated": false,
+  "resubmitted": false,
+  "platform_acceptance_guaranteed": false,
+  "current_gameplay_video_validation": {
+    "status": "pass",
+    "real_mouse_inputs": true,
+    "scenario": "safe opening, Dig/Flag switch, flag placement and three hints",
+    "full_game_clear_claimed": false,
+    "duration_seconds": 18.433333,
+    "resolutions": [
+      "1920x1080",
+      "1080x1620"
+    ],
+    "audio_streams": 0,
+    "speedup": false,
+    "cover_opening": true,
+    "note": "Clock jumps include the unchanged +10second hint penalties."
+  },
+  "upload_files": [
+    {
+      "file": "tiny-mines-crazygames.zip",
+      "bytes": 12638637,
+      "sha256": "328264861c9c7186358020c1937c6f927e947de41abc0c9c2138abe1edb4383a"
+    },
+    {
+      "file": "landscape_1920x1080.png",
+      "bytes": 1209778,
+      "sha256": "acd61352f755972d8167b4fdad9133461cbb2aba51982732df3b8023e6d54f7e"
+    },
+    {
+      "file": "portrait_800x1200.png",
+      "bytes": 694361,
+      "sha256": "32db1da647f5058766689700d748cd8628dbee336a6ae1ede3aa25bf3ec77943"
+    },
+    {
+      "file": "square_800x800.png",
+      "bytes": 480952,
+      "sha256": "53f5b0712e78eb6b8f014cff2feacc2571b79ac33502038f1a5d2088ca4c015b"
+    },
+    {
+      "file": "video_landscape.mp4",
+      "bytes": 774958,
+      "sha256": "1a8823d05919039149b6e9f1948e17340be5192c599d55243bd662b681760372"
+    },
+    {
+      "file": "video_portrait.mp4",
+      "bytes": 859207,
+      "sha256": "843594a11621e6c24264148d417fa7f7e3fcf70822e0e6650a99804a7a7969cf"
+    }
+  ],
+  "local_candidate_ready": true
+}

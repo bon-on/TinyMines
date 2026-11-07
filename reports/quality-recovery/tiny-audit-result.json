@@ -1,0 +1,281 @@
+[
+  {
+    "seed": 0,
+    "guess_required": true,
+    "revealed": [
+      7,
+      8,
+      9,
+      10,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34
+    ],
+    "known_mines": [
+      6,
+      11,
+      35
+    ],
+    "remaining": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "valid_models": 3,
+    "steps": 1
+  },
+  {
+    "seed": 1,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 2,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 3,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 4,
+    "guess_required": false,
+    "steps": 6
+  },
+  {
+    "seed": 5,
+    "guess_required": true,
+    "revealed": [
+      3,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35
+    ],
+    "known_mines": [
+      0,
+      6,
+      25
+    ],
+    "remaining": [
+      1,
+      2,
+      4,
+      5
+    ],
+    "valid_models": 2,
+    "steps": 1
+  },
+  {
+    "seed": 6,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 7,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 8,
+    "guess_required": false,
+    "steps": 5
+  },
+  {
+    "seed": 9,
+    "guess_required": false,
+    "steps": 3
+  },
+  {
+    "seed": 10,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 11,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 12,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 13,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 14,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 15,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 16,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 17,
+    "guess_required": true,
+    "revealed": [
+      3,
+      9,
+      10,
+      11,
+      14,
+      15,
+      16,
+      17,
+      20,
+      21,
+      22,
+      23,
+      26,
+      27,
+      28,
+      29,
+      33,
+      34,
+      35
+    ],
+    "known_mines": [
+      8,
+      32
+    ],
+    "remaining": [
+      0,
+      1,
+      2,
+      4,
+      5,
+      6,
+      7,
+      12,
+      13,
+      18,
+      19,
+      24,
+      25,
+      30,
+      31
+    ],
+    "valid_models": 10,
+    "steps": 1
+  },
+  {
+    "seed": 18,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 19,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 20,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 21,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 22,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 23,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 24,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 25,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 26,
+    "guess_required": false,
+    "steps": 2
+  },
+  {
+    "seed": 27,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 28,
+    "guess_required": false,
+    "steps": 1
+  },
+  {
+    "seed": 29,
+    "guess_required": false,
+    "steps": 1
+  }
+]
