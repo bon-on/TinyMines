@@ -196,7 +196,7 @@ void main() {
     expect(find.text('+10 XP'), findsOneWidget);
     expect(find.text('CLEARED'), findsOneWidget);
     expect(find.text('New Run'), findsOneWidget);
-    expect(find.text('Normal board'), findsOneWidget);
+    expect(find.text('Classic board'), findsOneWidget);
     expect(platform.events, ['start', 'stop']);
 
     final saved = store.value;

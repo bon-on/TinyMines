@@ -905,7 +905,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     : null,
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
-                nextLabel: report.garden ? 'Normal board' : null,
+                nextLabel: report.garden ? 'Classic board' : null,
                 onNext: report.garden
                     ? _restart
                     : report.won &&
