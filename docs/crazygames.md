@@ -46,6 +46,9 @@ On `localhost` the SDK environment is `local`; the console shows `Requesting gam
 | Overlay closes | `gameplayStart()` |
 | Game over / field cleared | `gameplayStop()` |
 | Restart, new field, difficulty switch | `gameplayStart()` |
+| Garden Run: run starts / stage cleared | `gameplayStart()` (already active) / no call, the next stage follows without a stop |
+| Garden Run: last heart lost | `gameplayStop()` |
+| Garden Run: leave or restart | the run is paid out once; normal start/stop transitions apply |
 | App inactive / hidden / paused | `gameplayStop()`; solve clock and music pause |
 | App resumed with no help/garden/result overlay | `gameplayStart()`; active solve clock resumes |
 
