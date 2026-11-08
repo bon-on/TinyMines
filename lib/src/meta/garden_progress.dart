@@ -1,6 +1,7 @@
 import '../game/difficulty.dart';
 import '../game/garden_run.dart';
 import 'daily_challenge.dart';
+import 'garden_plots.dart';
 import 'garden_theme.dart';
 
 /// Facts about one finished run (a win or a mine hit), fed to
@@ -74,6 +75,8 @@ class RunOutcome {
     required this.newlyUnlockedThemes,
     required this.dailyRecorded,
     required this.streak,
+    this.newPlots = const [],
+    this.completedSets = const [],
   });
 
   final GardenProgress progress;
@@ -93,6 +96,13 @@ class RunOutcome {
 
   /// Daily streak after this run.
   final int streak;
+
+  /// Garden plots first earned by this result.
+  final List<GardenPlot> newPlots;
+
+  /// Plot sets whose one-time XP bonus was paid by this result (included in
+  /// [xpGained]).
+  final List<PlotSet> completedSets;
 
   bool get leveledUp => levelAfter > levelBefore;
 }
@@ -118,6 +128,8 @@ class GardenProgress {
     required this.bestStreak,
     this.runsPlayed = 0,
     this.bestRunStage = 0,
+    this.dailyClears = 0,
+    this.rewardedSets = const <String>{},
   });
 
   const GardenProgress.initial()
@@ -131,7 +143,9 @@ class GardenProgress {
       lastDailyDay = null,
       bestStreak = 0,
       runsPlayed = 0,
-      bestRunStage = 0;
+      bestRunStage = 0,
+      dailyClears = 0,
+      rewardedSets = const <String>{};
 
   static const int dailyPlayXp = 15;
   static const int dailyWinXp = 40;
@@ -159,6 +173,19 @@ class GardenProgress {
 
   /// Highest Garden Run stage reached (0 before the first run).
   final int bestRunStage;
+
+  /// Scored daily gardens cleared (practice never counts).
+  final int dailyClears;
+
+  /// Ids of plot sets ([PlotSet.id]) whose bonus was already paid.
+  final Set<String> rewardedSets;
+
+  List<GardenPlot> get earnedPlots =>
+      GardenPlots.earned(bestRunStage: bestRunStage, dailyClears: dailyClears);
+
+  /// The closest plot still to earn; null when all are earned.
+  GardenPlot? get nextPlot =>
+      GardenPlots.next(bestRunStage: bestRunStage, dailyClears: dailyClears);
 
   static int winXp(Difficulty difficulty) => switch (difficulty) {
     Difficulty.easy => 30,
@@ -312,11 +339,52 @@ class GardenProgress {
       streak: nextStreak,
       lastDailyDay: nextLast,
       bestStreak: nextBestStreak,
+      dailyClears: dailyRecorded && run.won ? dailyClears + 1 : dailyClears,
     );
-    final levelAfter = next.level;
+    return _finish(
+      next,
+      xp: xp,
+      isNewBest: isNewBest,
+      previousBest: previousBest,
+      dailyRecorded: dailyRecorded,
+    );
+  }
+
+  /// Pays any completed, unpaid plot set and builds the outcome of a scored
+  /// result that turned this progress into [next].
+  RunOutcome _finish(
+    GardenProgress next, {
+    required int xp,
+    required bool isNewBest,
+    required int? previousBest,
+    required bool dailyRecorded,
+  }) {
+    final levelBefore = level;
+    final completed = [
+      for (final set in PlotSet.values)
+        if (!next.rewardedSets.contains(set.id) &&
+            GardenPlots.isSetComplete(
+              set,
+              bestRunStage: next.bestRunStage,
+              dailyClears: next.dailyClears,
+            ))
+          set,
+    ];
+    var paid = next;
+    var gained = xp;
+    if (completed.isNotEmpty) {
+      final bonus = completed.fold<int>(0, (sum, set) => sum + set.bonusXp);
+      gained += bonus;
+      paid = next._copy(
+        totalXp: next.totalXp + bonus,
+        rewardedSets: {...next.rewardedSets, for (final s in completed) s.id},
+      );
+    }
+    final before = earnedPlots.toSet();
+    final levelAfter = paid.level;
     return RunOutcome(
-      progress: next,
-      xpGained: xp,
+      progress: paid,
+      xpGained: gained,
       isNewBest: isNewBest,
       previousBest: previousBest,
       levelBefore: levelBefore,
@@ -328,7 +396,12 @@ class GardenProgress {
             theme,
       ],
       dailyRecorded: dailyRecorded,
-      streak: next.streak,
+      streak: paid.streak,
+      newPlots: [
+        for (final plot in paid.earnedPlots)
+          if (!before.contains(plot)) plot,
+      ],
+      completedSets: completed,
     );
   }
 
@@ -359,22 +432,12 @@ class GardenProgress {
       runsPlayed: runsPlayed + 1,
       bestRunStage: isNewBest ? run.stageReached : bestRunStage,
     );
-    final levelAfter = next.level;
-    return RunOutcome(
-      progress: next,
-      xpGained: xp,
+    return _finish(
+      next,
+      xp: xp,
       isNewBest: isNewBest,
       previousBest: bestRunStage > 0 ? bestRunStage : null,
-      levelBefore: levelBefore,
-      levelAfter: levelAfter,
-      newlyUnlockedThemes: [
-        for (final theme in GardenTheme.values)
-          if (levelBefore < theme.requiredLevel &&
-              levelAfter >= theme.requiredLevel)
-            theme,
-      ],
       dailyRecorded: false,
-      streak: streak,
     );
   }
 
@@ -392,6 +455,8 @@ class GardenProgress {
     'bestStreak': bestStreak,
     'runsPlayed': runsPlayed,
     'bestRunStage': bestRunStage,
+    'dailyClears': dailyClears,
+    'rewardedSets': rewardedSets.toList()..sort(),
   };
 
   /// Tolerant parser: every missing or invalid field falls back on its own.
@@ -431,6 +496,18 @@ class GardenProgress {
       });
     }
     final last = json['lastDailyDay'];
+    // Saves from before the plot collection have no counter: credit the won
+    // dailies still in the history (never less than a stored count).
+    final wonDailies = daily.values.where((r) => r.won).length;
+    final storedClears = readInt(json['dailyClears']);
+    final rewarded = <String>{};
+    final rawSets = json['rewardedSets'];
+    if (rawSets is List) {
+      for (final id in rawSets) {
+        final set = PlotSet.fromId(id);
+        if (set != null) rewarded.add(set.id);
+      }
+    }
     final progress = GardenProgress(
       bestTimes: readCounts(json['bestTimes']),
       wins: readCounts(json['wins']),
@@ -445,6 +522,8 @@ class GardenProgress {
       bestStreak: readInt(json['bestStreak']),
       runsPlayed: readInt(json['runsPlayed']),
       bestRunStage: readInt(json['bestRunStage']),
+      dailyClears: storedClears > wonDailies ? storedClears : wonDailies,
+      rewardedSets: Set.unmodifiable(rewarded),
     );
     final theme = json['selectedTheme'];
     return progress.withTheme(
@@ -464,6 +543,8 @@ class GardenProgress {
     int? bestStreak,
     int? runsPlayed,
     int? bestRunStage,
+    int? dailyClears,
+    Set<String>? rewardedSets,
   }) {
     return GardenProgress(
       bestTimes: Map.unmodifiable(bestTimes ?? this.bestTimes),
@@ -477,6 +558,8 @@ class GardenProgress {
       bestStreak: bestStreak ?? this.bestStreak,
       runsPlayed: runsPlayed ?? this.runsPlayed,
       bestRunStage: bestRunStage ?? this.bestRunStage,
+      dailyClears: dailyClears ?? this.dailyClears,
+      rewardedSets: Set.unmodifiable(rewardedSets ?? this.rewardedSets),
     );
   }
 }

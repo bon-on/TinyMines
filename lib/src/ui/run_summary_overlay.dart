@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
 import '../game/difficulty.dart';
+import '../meta/garden_plots.dart';
 import '../meta/garden_progress.dart';
 import '../meta/next_goal.dart';
 import '../share/result_copy.dart';
@@ -442,6 +443,28 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                 text: 'New theme: ${theme.label}',
                 color: palette.petal,
                 textColor: const Color(0xFF3B1830),
+              ),
+            ),
+        for (final plot in outcome.newPlots)
+          if (barT >= 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _Pill(
+                text:
+                    'New plot: ${plot.label} '
+                    '(${outcome.progress.earnedPlots.length}/${GardenPlots.total})',
+                color: palette.flowerCenter,
+                textColor: const Color(0xFF3B2A05),
+              ),
+            ),
+        for (final set in outcome.completedSets)
+          if (barT >= 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _Pill(
+                text: 'Set complete: ${set.label} +${set.bonusXp} XP',
+                color: palette.accent,
+                textColor: palette.onAccent,
               ),
             ),
         if (outcome.dailyRecorded) ...[

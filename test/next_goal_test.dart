@@ -5,20 +5,28 @@ import 'package:tiny_mines/src/meta/next_goal.dart';
 GardenProgress _p({int xp = 0, int best = 0}) =>
     GardenProgress.fromJson({'totalXp': xp, 'bestRunStage': best});
 
+extension on GardenProgress {
+  GardenProgress withDailyClears(int clears) =>
+      GardenProgress.fromJson({...toJson(), 'dailyClears': clears});
+}
+
 void main() {
-  test('a new garden: first run first, then level, then Autumn', () {
+  test('a new garden: first run first, then the daily plot, then level', () {
     final goals = nextGoals(_p());
     expect(goals.map((g) => g.kind), [
       GoalKind.run,
+      GoalKind.plot,
       GoalKind.level,
-      GoalKind.theme,
     ]);
     expect(goals[0].title, 'Play your first Garden Run');
-    expect(goals[1].title, 'Reach garden Lv 2');
-    expect(goals[1].detail, '100 XP to go');
-    expect(goals[1].estimate, 2);
-    expect(goals[2].title, 'Unlock the Autumn theme');
-    expect(goals[2].detail, 'Lv 3 - 240 XP to go');
+    expect(goals[1].title, 'Earn the Mushroom ring plot');
+    expect(goals[1].detail, 'Clear a daily garden - 0/8 plots');
+    expect(goals[2].title, 'Reach garden Lv 2');
+    expect(goals[2].detail, '100 XP to go');
+    expect(goals[2].estimate, 2);
+    final theme = nextGoals(_p(), limit: 9).last;
+    expect(theme.title, 'Unlock the Autumn theme');
+    expect(theme.detail, 'Lv 3 - 240 XP to go');
   });
 
   test('a theme opened by the next level joins the level goal', () {
@@ -45,18 +53,27 @@ void main() {
   });
 
   test('a plot asking for the same stage replaces the run goal', () {
-    const plot = NextGoal(
-      kind: GoalKind.plot,
-      title: 'Earn the Rose arch plot',
-      detail: 'Reach stage 5 in Garden Run (2/8)',
-      current: 2,
-      target: 8,
-      estimate: 1,
-      runStage: 5,
-    );
-    final goals = nextGoals(_p(best: 4), extra: const [plot], limit: 5);
+    // Stage 4 best: the Rose arch plot (stage 5) is one stage away.
+    final goals = nextGoals(_p(best: 4), limit: 5);
     expect(goals.where((g) => g.kind == GoalKind.run), isEmpty);
-    expect(goals.first, same(plot));
+    final plot = goals.firstWhere((g) => g.kind == GoalKind.plot);
+    expect(plot.title, 'Earn the Rose arch plot');
+    expect(plot.detail, 'Reach stage 5 in Garden Run - 2/8 plots');
+    expect(plot.runStage, 5);
+    expect(plot.estimate, 1);
+  });
+
+  test('daily plot goals count the clears still missing', () {
+    final goal = plotGoal(_p(best: 9).withDailyClears(2))!;
+    expect(goal.title, 'Earn the Berry bush plot');
+    expect(goal.detail, 'Clear 2 more daily gardens - 6/8 plots');
+    expect(goal.estimate, 2);
+  });
+
+  test('a finished collection has no plot goal', () {
+    final done = GardenProgress.fromJson({'bestRunStage': 9, 'dailyClears': 7});
+    expect(plotGoal(done), isNull);
+    expect(nextGoals(done).where((g) => g.kind == GoalKind.plot), isEmpty);
   });
 
   test('every theme unlocked: no theme goal, still a level goal', () {

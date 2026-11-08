@@ -1602,6 +1602,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               const SizedBox(height: 12),
               GardenPanel(
                 palette: palette,
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: GardenPlotsCard(palette: palette, progress: _progress),
+              ),
+              const SizedBox(height: 12),
+              GardenPanel(
+                palette: palette,
                 child: RecordsCard(palette: palette, progress: _progress),
               ),
             ]),

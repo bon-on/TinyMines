@@ -36,7 +36,7 @@ give a reason for one more play. Tiny Mines has neither.
    - Garden Run: first run ("Play your first Garden Run") or beating the best stage (reach best + 1);
    - garden plot (from `feature-garden-collection`): the closest unearned plot with N/total.
    Each goal has an estimated number of plays (XP goals: missing XP / 50; first run: 1; best stage: 2; plot: stages or daily
-   clears still missing). The smallest is highlighted (ties: level, plot, Garden Run, theme). A Garden Run goal that asks for
+   clears still missing). The smallest is highlighted (ties: level, Garden Run, plot, theme). A Garden Run goal that asks for
    the same stage as the next run plot is dropped. Up to three goals are shown: the highlight with a title, a number line and a
    progress bar, the others as one short line each. All cases (max level themes unlocked, every plot earned) work.
 2. Copy result button on the result card (not for unscored daily practice). Text only, English ASCII, no emoji:

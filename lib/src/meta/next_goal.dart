@@ -1,8 +1,9 @@
+import 'garden_plots.dart';
 import 'garden_progress.dart';
 import 'garden_theme.dart';
 
 /// What a goal is about; also its tie-break order (lower first).
-enum GoalKind { level, plot, run, theme }
+enum GoalKind { level, run, plot, theme }
 
 /// One reachable target shown on the result card (feature-next-goal-share).
 class NextGoal {
@@ -52,13 +53,32 @@ int xpToLevel(GardenProgress progress, int level) {
   return xp;
 }
 
-/// Goals for [progress], closest first (ties: level, plot, run, theme).
-/// [extra] goals (for example the garden plot goal) join the same ranking.
-List<NextGoal> nextGoals(
-  GardenProgress progress, {
-  Iterable<NextGoal> extra = const [],
-  int limit = 3,
-}) {
+/// The closest unearned garden plot (feature-garden-collection) as a goal;
+/// null when the collection is complete.
+NextGoal? plotGoal(GardenProgress progress) {
+  final plot = progress.nextPlot;
+  if (plot == null) return null;
+  final earned = progress.earnedPlots.length;
+  return NextGoal(
+    kind: GoalKind.plot,
+    title: 'Earn the ${plot.label} plot',
+    detail:
+        '${plot.goalText(dailyClears: progress.dailyClears)} - '
+        '$earned/${GardenPlots.total} plots',
+    current: earned,
+    target: GardenPlots.total,
+    estimate: plot.remaining(
+      bestRunStage: progress.bestRunStage,
+      dailyClears: progress.dailyClears,
+    ),
+    runStage: plot.isRunPlot ? plot.requirement : null,
+  );
+}
+
+/// Goals for [progress], closest first (ties: level, run, plot, theme):
+/// the next level, a farther theme, the closest garden plot and the Garden
+/// Run target. A run target that a plot goal already asks for is dropped.
+List<NextGoal> nextGoals(GardenProgress progress, {int limit = 3}) {
   final goals = <NextGoal>[];
   final level = progress.level;
   final missing = progress.xpForNextLevel - progress.xpIntoLevel;
@@ -93,7 +113,8 @@ List<NextGoal> nextGoals(
     );
     break;
   }
-  final extras = extra.toList();
+  final plot = plotGoal(progress);
+  final extras = [?plot];
   final best = progress.bestRunStage;
   final runTarget = best + 1;
   final duplicate = extras.any((g) => g.runStage == runTarget);

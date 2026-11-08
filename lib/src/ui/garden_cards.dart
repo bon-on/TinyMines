@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 
 import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
+import '../art/plot_art.dart';
 import '../game/difficulty.dart';
 import '../game/garden_run.dart';
+import '../meta/garden_plots.dart';
 import '../meta/garden_progress.dart';
 import '../meta/garden_theme.dart';
 import 'garden_ui.dart';
@@ -582,6 +584,170 @@ class GardenRunHud extends StatelessWidget {
   }
 }
 
+/// One garden plot tile: in color when earned, a dim greyed outline with a
+/// lock otherwise. The tooltip names the plot and what earns it.
+class PlotTile extends StatelessWidget {
+  const PlotTile({
+    super.key,
+    required this.palette,
+    required this.plot,
+    required this.earned,
+    this.size = 56,
+  });
+
+  final GardenPalette palette;
+  final GardenPlot plot;
+  final bool earned;
+  final double size;
+
+  static const List<double> _grey = [
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0, 0, 0, 0.38, 0,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    Widget art = CustomPaint(
+      size: Size.square(size),
+      painter: PlotPainter(plot: plot, palette: palette),
+    );
+    if (!earned) {
+      art = Stack(
+        alignment: Alignment.center,
+        children: [
+          ColorFiltered(
+            colorFilter: const ColorFilter.matrix(_grey),
+            child: art,
+          ),
+          Icon(
+            Icons.lock_rounded,
+            size: size * 0.32,
+            color: palette.textSecondary,
+          ),
+        ],
+      );
+    }
+    return Tooltip(
+      message: earned
+          ? '${plot.label} - earned'
+          : '${plot.label}: ${plot.requirementText}',
+      child: Semantics(
+        label: earned
+            ? '${plot.label}, earned'
+            : '${plot.label}, locked: ${plot.requirementText}',
+        child: Container(
+          key: ValueKey('plot-${plot.name}'),
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: earned
+                ? palette.skyBottom.withValues(alpha: 0.55)
+                : palette.textSecondary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(size * 0.22),
+            border: Border.all(
+              color: earned ? palette.flowerCenter : palette.panelBorder,
+              width: 2,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(size * 0.2),
+            child: art,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Garden plots N/8": both sets with their plots, the set bonus and the
+/// next plot to earn (feature-garden-collection).
+class GardenPlotsCard extends StatelessWidget {
+  const GardenPlotsCard({
+    super.key,
+    required this.palette,
+    required this.progress,
+  });
+
+  final GardenPalette palette;
+  final GardenProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final earned = progress.earnedPlots.toSet();
+    final next = progress.nextPlot;
+    final dim = TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 12,
+      color: palette.textSecondary,
+    );
+    return Column(
+      key: const ValueKey('garden-plots'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(child: PanelCaption('Garden plots', palette: palette)),
+            Text(
+              '${earned.length}/${GardenPlots.total}',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+                color: palette.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        for (final set in PlotSet.values) ...[
+          const SizedBox(height: 6),
+          Text(
+            progress.rewardedSets.contains(set.id)
+                ? '${set.label} - complete'
+                : '${set.label} - +${set.bonusXp} XP when complete',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: dim,
+          ),
+          const SizedBox(height: 4),
+          LayoutBuilder(
+            builder: (context, box) {
+              final tile = ((box.maxWidth - 3 * 6) / 4).clamp(28.0, 60.0);
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  for (final plot in set.plots)
+                    PlotTile(
+                      palette: palette,
+                      plot: plot,
+                      earned: earned.contains(plot),
+                      size: tile,
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          next == null
+              ? 'Collection complete!'
+              : 'Next: ${next.label} - '
+                    '${next.goalText(dailyClears: progress.dailyClears)}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 12.5,
+            color: palette.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Best time and win count per difficulty, plus the best daily streak.
 class RecordsCard extends StatelessWidget {
   const RecordsCard({super.key, required this.palette, required this.progress});
@@ -774,6 +940,11 @@ class _GardenOverlayState extends State<GardenOverlay> {
                               today: widget.today,
                               playing: widget.dailyPlaying,
                               onPlay: widget.onPlayDaily,
+                            ),
+                            const SizedBox(height: 14),
+                            GardenPlotsCard(
+                              palette: palette,
+                              progress: widget.progress,
                             ),
                             const SizedBox(height: 14),
                             RecordsCard(
