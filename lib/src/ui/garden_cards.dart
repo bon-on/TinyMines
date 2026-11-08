@@ -309,6 +309,158 @@ class GardenRunCard extends StatelessWidget {
   }
 }
 
+/// Highlighted "Try Garden Run" call to action, shown until the first run is
+/// played (feature-first-run-onboarding). Tapping it starts a run.
+class GardenRunCta extends StatelessWidget {
+  const GardenRunCta({
+    super.key,
+    required this.palette,
+    required this.onStart,
+    this.compact = false,
+  });
+
+  static const String title = 'Try Garden Run';
+  static const String subtitle = '3 hearts, bigger gardens';
+
+  final GardenPalette palette;
+
+  /// Null while the saved progress is still loading.
+  final VoidCallback? onStart;
+
+  /// One-row variant for the narrow layout.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = palette.danger;
+    final radius = BorderRadius.circular(compact ? 22 : 20);
+    final heart = Stack(
+      alignment: Alignment.center,
+      children: [
+        Icon(
+          Icons.favorite_rounded,
+          size: compact ? 36 : 44,
+          color: const Color(0xFFFFFFFF),
+        ),
+        Text(
+          '${GardenRun.startHearts}',
+          style: TextStyle(
+            fontSize: compact ? 13 : 16,
+            fontWeight: FontWeight.w900,
+            color: base,
+          ),
+        ),
+      ],
+    );
+    const white = Color(0xFFFFFFFF);
+    final texts = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            title,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: compact ? 16 : 18,
+              fontWeight: FontWeight.w900,
+              color: white,
+            ),
+          ),
+        ),
+        Text(
+          subtitle,
+          maxLines: compact ? 1 : 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: Color(0xE6FFFFFF),
+          ),
+        ),
+        if (!compact) ...[
+          const SizedBox(height: 4),
+          const Text(
+            'A mole costs a heart, not the run. Boss gardens heal.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.25,
+              fontWeight: FontWeight.w700,
+              color: Color(0xD9FFFFFF),
+            ),
+          ),
+        ],
+      ],
+    );
+    final play = Container(
+      width: compact ? 34 : 40,
+      height: compact ? 34 : 40,
+      decoration: const BoxDecoration(color: white, shape: BoxShape.circle),
+      child: Icon(
+        Icons.play_arrow_rounded,
+        color: base,
+        size: compact ? 24 : 28,
+      ),
+    );
+    return Semantics(
+      button: true,
+      label: '$title: $subtitle',
+      excludeSemantics: true,
+      child: Opacity(
+        opacity: onStart == null ? 0.6 : 1,
+        child: Material(
+          key: const ValueKey('garden-run-cta'),
+          color: Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color.lerp(base, white, 0.18)!, base],
+              ),
+              border: Border.all(color: white, width: 2),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x40000000),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: InkWell(
+              borderRadius: radius,
+              onTap: onStart,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: compact ? 5 : 12,
+                ),
+                // Narrow side columns drop the play disc to keep the title.
+                child: LayoutBuilder(
+                  builder: (context, box) => Row(
+                    children: [
+                      heart,
+                      const SizedBox(width: 10),
+                      Expanded(child: texts),
+                      if (box.maxWidth >= 240) ...[
+                        const SizedBox(width: 8),
+                        play,
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Large hearts row shown right above the board during a Garden Run.
 class RunHeartsRow extends StatelessWidget {
   const RunHeartsRow({

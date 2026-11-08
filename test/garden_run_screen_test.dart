@@ -76,8 +76,12 @@ Future<void> _pump(
 }
 
 Future<void> _startRun(WidgetTester tester) async {
+  // Before the first run the entry is the "Try Garden Run" call to action.
+  final cta = find.byKey(const ValueKey('garden-run-cta'));
   final wide = find.text('Start Garden Run');
-  final button = wide.evaluate().isNotEmpty
+  final button = cta.evaluate().isNotEmpty
+      ? cta
+      : wide.evaluate().isNotEmpty
       ? wide
       : find.textContaining('Garden Run -');
   await tester.tap(button);

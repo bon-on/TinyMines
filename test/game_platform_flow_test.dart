@@ -112,15 +112,16 @@ void main() {
     expect(platform.events, <String>['start']);
   });
 
-  testWidgets('first launch starts only after the overlay closes', (
+  testWidgets('first launch starts gameplay at once under the tip strip', (
     tester,
   ) async {
     final platform = _FakePlatform();
     await _pump(tester, platform, _FakeStore());
-    expect(find.text('How to play'), findsOneWidget);
-    expect(platform.events, isEmpty);
+    expect(find.text('How to play'), findsNothing);
+    expect(find.byKey(const ValueKey('onboarding-strip')), findsOneWidget);
+    expect(platform.events, <String>['start']);
 
-    await tester.tap(find.text('Skip'));
+    await tester.tap(find.byTooltip('Hide tips'));
     await tester.pumpAndSettle();
     expect(platform.events, <String>['start']);
   });

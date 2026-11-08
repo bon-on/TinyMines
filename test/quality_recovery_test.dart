@@ -209,29 +209,33 @@ void main() {
     },
   );
 
-  testWidgets(
-    'one visual tutorial is skippable and never starts a hidden board',
-    (tester) async {
-      final watch = FakeStopwatch();
-      final tutorial = _Tutorial(seen: false);
-      final platform = _Platform();
-      await _pump(tester, watch: watch, tutorial: tutorial, platform: platform);
-      expect(find.byKey(const ValueKey('neighbor-example')), findsOneWidget);
-      expect(find.text('Next'), findsNothing);
-      expect(platform.events, isEmpty);
-      await tester.tap(_tiles.first, warnIfMissed: false);
-      expect(_field(tester).armed, isFalse);
-      await tester.tap(find.text('Play'));
-      await tester.pump();
-      expect(tutorial.seen, isTrue);
-      expect(platform.events, ['start']);
-      expect(watch.isRunning, isFalse);
-      await tester.tap(_tiles.at(14));
-      await tester.pump();
-      expect(watch.isRunning, isTrue);
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+  testWidgets('the visual card behind ? never starts a hidden board', (
+    tester,
+  ) async {
+    final watch = FakeStopwatch();
+    final tutorial = _Tutorial(seen: false);
+    final platform = _Platform();
+    await _pump(tester, watch: watch, tutorial: tutorial, platform: platform);
+    // First launch: no card, the board is live.
+    expect(find.byKey(const ValueKey('neighbor-example')), findsNothing);
+    expect(platform.events, ['start']);
+    await tester.tap(find.byTooltip('How to play'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('neighbor-example')), findsOneWidget);
+    expect(find.text('Next'), findsNothing);
+    expect(platform.events, ['start', 'stop']);
+    await tester.tap(_tiles.first, warnIfMissed: false);
+    expect(_field(tester).armed, isFalse);
+    await tester.tap(find.text('Play'));
+    await tester.pump();
+    expect(tutorial.seen, isTrue);
+    expect(platform.events, ['start', 'stop', 'start']);
+    expect(watch.isRunning, isFalse);
+    await tester.tap(_tiles.at(14));
+    await tester.pump();
+    expect(watch.isRunning, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets(
     'inactivity pauses clock, audio and events; overlays block foreground resume',

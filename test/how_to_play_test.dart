@@ -67,18 +67,34 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+Future<void> _openCard(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('How to play'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('first launch shows the overlay and blocks the board', (
+  testWidgets('first launch shows tips over a live board, not the card', (
     tester,
   ) async {
+    final watch = FakeStopwatch();
+    await _pump(tester, _FakeStore(), stopwatch: watch);
+    expect(find.text('How to play'), findsNothing);
+    expect(find.byKey(const ValueKey('onboarding-strip')), findsOneWidget);
+    await tester.tap(_tiles.first);
+    await tester.pump();
+    expect(watch.isRunning, isTrue, reason: 'the first dig counts');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('the ? card blocks the board while open', (tester) async {
     await _pump(tester, _FakeStore());
+    await _openCard(tester);
     expect(find.text('How to play'), findsOneWidget);
     await tester.tap(_tiles.first, warnIfMissed: false);
     await tester.pump();
     expect(find.text('0:00'), findsOneWidget);
-    expect(find.text('Moves'), findsOneWidget);
     expect(find.text('1'), findsNothing);
   });
 
@@ -87,6 +103,7 @@ void main() {
   ) async {
     final store = _FakeStore();
     await _pump(tester, store);
+    await _openCard(tester);
     expect(find.byKey(const ValueKey('neighbor-example')), findsOneWidget);
     expect(find.textContaining('all 8 neighboring patches'), findsOneWidget);
     expect(find.text('Play'), findsOneWidget);
@@ -95,11 +112,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('How to play'), findsNothing);
     expect(store.seen, isTrue);
+    expect(find.byKey(const ValueKey('onboarding-strip')), findsNothing);
   });
 
   testWidgets('Skip and Escape close and store the flag', (tester) async {
     final store = _FakeStore();
     await _pump(tester, store);
+    await _openCard(tester);
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
     expect(find.text('How to play'), findsNothing);
@@ -108,6 +127,7 @@ void main() {
     final escStore = _FakeStore();
     await tester.pumpWidget(const SizedBox.shrink());
     await _pump(tester, escStore);
+    await _openCard(tester);
     expect(find.text('How to play'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -120,6 +140,7 @@ void main() {
   ) async {
     final store = _FakeStore();
     await _pump(tester, store);
+    await _openCard(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
@@ -130,18 +151,21 @@ void main() {
     expect(store.seen, isTrue);
   });
 
-  testWidgets('no overlay when the flag is set', (tester) async {
+  testWidgets('no overlay and no tips when the flag is set', (tester) async {
     await _pump(tester, _FakeStore(seen: true));
     expect(find.text('How to play'), findsNothing);
+    expect(find.byKey(const ValueKey('onboarding-strip')), findsNothing);
   });
 
   testWidgets('real store persists the flag in shared_preferences', (
     tester,
   ) async {
     await _pump(tester, const TutorialStore());
-    expect(find.text('How to play'), findsOneWidget);
-    await tester.tap(find.text('Skip'));
+    expect(find.byKey(const ValueKey('onboarding-strip')), findsOneWidget);
+    expect(await const TutorialStore().hasSeen(), isFalse);
+    await tester.tap(find.byTooltip('Hide tips'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('onboarding-strip')), findsNothing);
     expect(await const TutorialStore().hasSeen(), isTrue);
   });
 
@@ -204,7 +228,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('taps are ignored while the first-run check is pending', (
+  testWidgets('a tap during the first-run check is held, then dug', (
     tester,
   ) async {
     final store = _SlowStore();
@@ -224,13 +248,12 @@ void main() {
     await tester.tap(_tiles.first, warnIfMissed: false);
     await tester.pump();
     // A revealed first tile would have started the clock.
-    expect(watch.isRunning, isFalse, reason: 'tap must be absorbed');
+    expect(watch.isRunning, isFalse, reason: 'tap is held, not applied');
     store.release.complete();
     await tester.pumpAndSettle();
-    expect(find.text('How to play'), findsOneWidget);
-    await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
-    expect(watch.isRunning, isFalse, reason: 'game is still untouched');
+    expect(find.text('How to play'), findsNothing);
+    expect(watch.isRunning, isTrue, reason: 'the held tap was applied');
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('board accepts taps after a late seen answer', (tester) async {
@@ -261,6 +284,7 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _FakeStore());
+    await _openCard(tester);
     expect(await tester.sendKeyEvent(LogicalKeyboardKey.f5), isFalse);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -274,6 +298,7 @@ void main() {
   for (final size in const [Size(390, 844), Size(844, 390), Size(1280, 720)]) {
     testWidgets('overlay fits without overflow at $size', (tester) async {
       await _pump(tester, _FakeStore(), size: size);
+      await _openCard(tester);
       expect(tester.takeException(), isNull);
       final card = tester.getRect(find.byType(SingleChildScrollView));
       expect(card.width, lessThanOrEqualTo(360));

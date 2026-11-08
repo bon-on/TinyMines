@@ -5,6 +5,7 @@ import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
 import '../game/difficulty.dart';
 import '../meta/garden_progress.dart';
+import 'garden_cards.dart';
 import 'garden_ui.dart';
 
 /// Facts shown on the end-of-run card.
@@ -62,6 +63,7 @@ class RunSummaryOverlay extends StatefulWidget {
     this.nextLabel,
     this.onPractice,
     this.onShown,
+    this.onTryGardenRun,
     this.delay = const Duration(milliseconds: 750),
   });
 
@@ -78,6 +80,10 @@ class RunSummaryOverlay extends StatefulWidget {
 
   /// Called once when the card has popped in (for the reward sound).
   final VoidCallback? onShown;
+
+  /// Shows the "Try Garden Run" call to action (regular win before the
+  /// first run); null hides it.
+  final VoidCallback? onTryGardenRun;
   final Duration delay;
 
   @override
@@ -419,6 +425,14 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
             icon: Icons.school_rounded,
             primary: false,
             onPressed: widget.onPractice,
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (widget.onTryGardenRun != null) ...[
+          GardenRunCta(
+            palette: palette,
+            compact: true,
+            onStart: widget.onTryGardenRun,
           ),
           const SizedBox(height: 10),
         ],

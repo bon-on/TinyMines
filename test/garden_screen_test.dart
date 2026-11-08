@@ -225,7 +225,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('a held tap is dropped when the tutorial opens instead', (
+    testWidgets('a held first-run tap is applied under the tip strip', (
       tester,
     ) async {
       final store = _LateUnseen();
@@ -235,21 +235,15 @@ void main() {
       await tester.tap(_tiles.at(14), warnIfMissed: false);
       store.release.complete();
       await tester.pumpAndSettle();
-      expect(find.text('How to play'), findsOneWidget);
-      await tester.tap(find.text('Skip'));
-      await tester.pumpAndSettle();
-      expect(watch.isRunning, isFalse, reason: 'the board is untouched');
-      expect(find.textContaining('Field cleared'), findsNothing);
+      expect(find.text('How to play'), findsNothing);
+      expect(find.byKey(const ValueKey('onboarding-strip')), findsOneWidget);
+      expect(watch.isRunning, isTrue, reason: 'the held tap dug');
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('the first tap right after the tutorial closes counts', (
-      tester,
-    ) async {
+    testWidgets('the very first tap of a new player counts', (tester) async {
       final watch = FakeStopwatch();
       await _pump(tester, tutorial: _Store(seen: false), stopwatch: watch);
-      await tester.tap(find.text('Skip'));
-      await tester.pumpAndSettle();
       await tester.tap(_tiles.at(20));
       await tester.pump();
       expect(watch.isRunning, isTrue);

@@ -21,6 +21,7 @@ import 'src/ui/board_fx.dart';
 import 'src/ui/garden_board.dart';
 import 'src/ui/garden_cards.dart';
 import 'src/ui/garden_ui.dart';
+import 'src/ui/onboarding_strip.dart';
 import 'src/ui/run_summary_overlay.dart';
 
 Future<void> main() async {
@@ -132,6 +133,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   int _tutorialSession = 0;
   // Gameplay events wait until the first-run tutorial check has answered.
   bool _tutorialChecked = false;
+
+  /// First-run tips above the board (feature-first-run-onboarding); shown
+  /// while the tutorial flag is unset and the player has not hidden them.
+  bool _onboarding = false;
+  bool _onboardingFlagged = false;
   bool _gameplayActive = false;
   bool _appActive = true;
   bool _flagMode = false;
@@ -215,7 +221,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _sound.startMusic();
     _restart();
     unawaited(_loadProgress());
-    _maybeShowTutorial();
+    _checkFirstRun();
   }
 
   Future<void> _loadProgress() async {
@@ -251,7 +257,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     return false;
   }
 
-  Future<void> _maybeShowTutorial() async {
+  /// First launch: no modal card. A first-time player gets the board at once
+  /// with a short tip strip above it; the full card stays behind "?".
+  Future<void> _checkFirstRun() async {
     final session = _tutorialSession;
     var seen = false;
     try {
@@ -259,15 +267,34 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     } catch (_) {}
     if (!mounted) return;
     // Rebuild so the control gate in build() lifts even if nothing else does.
-    setState(() => _tutorialChecked = true);
-    // Ignore a stale answer if the player already opened it via "?".
-    if (seen || session != _tutorialSession) {
-      _syncGameplay();
-      _applyPendingTap();
-      return;
-    }
-    _pendingTap = null;
-    _openTutorial();
+    // If the player already opened the card via "?", closing it ends the
+    // first-run guidance instead.
+    setState(() {
+      _tutorialChecked = true;
+      _onboarding = !seen && session == _tutorialSession && !_tutorialOpen;
+    });
+    _syncGameplay();
+    _applyPendingTap();
+  }
+
+  /// Hides the first-run tips for good (stores the tutorial flag).
+  void _endOnboarding() {
+    if (!_onboarding) return;
+    setState(() => _onboarding = false);
+    _markTutorialSeen();
+  }
+
+  void _markTutorialSeen() {
+    try {
+      unawaited(widget.tutorialStore.markSeen().catchError((Object _) {}));
+    } catch (_) {}
+  }
+
+  OnboardingStep get _onboardingStep {
+    if (_onboardingFlagged) return OnboardingStep.chord;
+    return _runStarted || _field.armed
+        ? OnboardingStep.numbers
+        : OnboardingStep.start;
   }
 
   /// A returning player may tap the board before the first-run check has
@@ -312,10 +339,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   void _closeTutorial() {
     if (!_tutorialOpen) return;
-    setState(() => _tutorialOpen = false);
+    setState(() {
+      _tutorialOpen = false;
+      _onboarding = false;
+    });
     _syncGameplay();
     _resumeClock();
-    widget.tutorialStore.markSeen();
+    _markTutorialSeen();
   }
 
   void _openGarden() {
@@ -659,6 +689,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       }
     }
     if (run != null && !_lost && _won) _stageCleared();
+    if (_over) _endOnboarding();
     setState(() {});
     _syncGameplay();
     if (run != null) {
@@ -755,6 +786,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (!_appActive || _overlayOpen || _summaryOpen) return;
     if (!_field.toggleFlag(index)) return;
     _clearFeedback();
+    if (_field.cells[index].flagged) _onboardingFlagged = true;
     _sound.play(Sfx.flag);
     _fx.flag(index, planted: _field.cells[index].flagged);
     setState(() {});
@@ -841,7 +873,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           ? 'Practice for ${formatDay(date)} - no XP or records. Your daily result is saved.'
           : 'Daily garden for ${formatDay(date)}: one scored try, same board for everyone.';
     }
-    if (!_field.armed) return 'Start anywhere - your first dig is safe.';
+    if (!_field.armed) {
+      // The tip strip already says it; keep the status line short.
+      return _onboarding
+          ? 'Tap any patch to dig.'
+          : 'Start anywhere - your first dig is safe.';
+    }
     return _flagMode
         ? 'Flag mode: tap a hidden patch to mark or remove a flag.'
         : 'Dig mode: tap to dig. Numbers count moles in all 8 neighbors.';
@@ -922,6 +959,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     : null,
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
+                onTryGardenRun:
+                    !report.garden &&
+                        !report.daily &&
+                        report.won &&
+                        _progressLoaded &&
+                        _progress.runsPlayed == 0
+                    ? _startGardenRun
+                    : null,
                 nextLabel: report.garden ? 'Classic board' : null,
                 onNext: report.garden
                     ? _restart
@@ -1200,6 +1245,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               const SizedBox(height: 8),
               _gate(_modeControls(palette)),
               const SizedBox(height: 6),
+              if (_onboarding) ...[
+                _tipStrip(palette, compact: false),
+                const SizedBox(height: 6),
+              ],
               Expanded(child: _board(palette)),
               const SizedBox(height: 8),
               _statusArea(palette),
@@ -1212,9 +1261,28 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
+  Widget _tipStrip(GardenPalette palette, {required bool compact}) =>
+      OnboardingStrip(
+        palette: palette,
+        step: _onboardingStep,
+        compact: compact,
+        onClose: _endOnboarding,
+      );
+
+  /// Garden Run is promoted until the first run has been played.
+  bool get _promoteRun =>
+      _progressLoaded && _run == null && _progress.runsPlayed == 0;
+
   /// Narrow screens: the Garden Run entry button, or its live status.
   Widget _runStrip(GardenPalette palette) {
     final run = _run;
+    if (_promoteRun) {
+      return GardenRunCta(
+        palette: palette,
+        compact: true,
+        onStart: _startGardenRun,
+      );
+    }
     if (run == null) {
       final best = _progress.bestRunStage;
       return GardenButton(
@@ -1336,6 +1404,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   Widget _wideLayout(GardenPalette palette, BoxConstraints box) {
     final side = (box.maxWidth * 0.235).clamp(210.0, 300.0);
+    final shortWide = box.maxHeight < 520;
     final stats = _stats;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
@@ -1363,15 +1432,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              GardenPanel(
-                palette: palette,
-                child: GardenRunCard(
+              if (_promoteRun)
+                GardenRunCta(palette: palette, onStart: _startGardenRun)
+              else
+                GardenPanel(
                   palette: palette,
-                  progress: _progress,
-                  playing: _run != null,
-                  onStart: _progressLoaded ? _startGardenRun : null,
+                  child: GardenRunCard(
+                    palette: palette,
+                    progress: _progress,
+                    playing: _run != null,
+                    onStart: _progressLoaded ? _startGardenRun : null,
+                  ),
                 ),
-              ),
               const SizedBox(height: 12),
               GardenPanel(
                 palette: palette,
@@ -1422,9 +1494,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 const SizedBox(height: 8),
                 _gate(_modeControls(palette)),
                 const SizedBox(height: 8),
+                if (_onboarding && !shortWide) ...[
+                  _tipStrip(palette, compact: box.maxHeight < 600),
+                  const SizedBox(height: 8),
+                ],
                 Expanded(child: _board(palette)),
                 const SizedBox(height: 8),
-                _statusArea(palette),
+                // Short landscape screens: the tips take the status line's
+                // place (feedback still wins) so the board keeps its size.
+                if (shortWide &&
+                    _onboarding &&
+                    _boardFeedback == null &&
+                    !_over)
+                  _tipStrip(palette, compact: true)
+                else
+                  _statusArea(palette),
               ],
             ),
           ),
