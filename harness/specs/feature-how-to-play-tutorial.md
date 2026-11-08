@@ -56,3 +56,9 @@ with a way to skip it.
 ## Quality recovery revision
 
 `feature-crazygames-quality-recovery` replaces the original three-page first-run copy with one visual card and contextual in-game guidance; persistence, input isolation and clock behavior remain required.
+
+## First-run onboarding revision
+
+`feature-first-run-onboarding` replaces the automatic first-launch card with a non-blocking hint strip above a playable
+board. The card stays reachable through `?` with the same input isolation, clock pause and keys; `tutorial_seen_v1` keeps its
+meaning (first-run guidance finished) and format. Acceptance items about the overlay at launch now apply to the `?` card.

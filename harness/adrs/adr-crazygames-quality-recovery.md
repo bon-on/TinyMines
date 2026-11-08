@@ -4,6 +4,7 @@ title: Refine regular Easy generation and first-session controls after quality r
 status: accepted
 related_specs:
   - feature-crazygames-quality-recovery
+  - feature-first-run-onboarding
 ---
 
 # Quality recovery
@@ -19,3 +20,7 @@ Retain the established garden art and Minesweeper rules. Give regular Easy a bou
 ## Consequences
 
 A rejected game must be updated through its supported existing portal route; do not create a duplicate submission to bypass a rejection. Technical verification and UX improvements cannot guarantee a subjective quality acceptance.
+
+## Addendum: non-blocking onboarding
+
+The short visual card no longer opens automatically. First-time players get a dismissible hint strip over a playable board (`feature-first-run-onboarding`); the card remains behind `?`. Garden Run is promoted with a call to action until the first run is played.
