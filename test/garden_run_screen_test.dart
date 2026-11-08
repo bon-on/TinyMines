@@ -392,8 +392,16 @@ void main() {
       for (var i = 0; i < 25; i++)
         if (!ref.cells[i].mine && !ref.cells[i].revealed) i,
     ];
+    expect(find.text('Heart lost! 2 left'), findsOneWidget);
+    final hidden = find.bySemanticsLabel('Hidden tile').evaluate().length;
     await _tap(tester, safe.first);
     expect(tester.takeException(), isNull);
+    // The dig went through while the overlay was still up.
+    expect(find.text('Heart lost! 2 left'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Hidden tile').evaluate().length,
+      lessThan(hidden),
+    );
     await tester.pump(const Duration(milliseconds: 1500));
     expect(find.textContaining('Heart lost!'), findsNothing);
     expect(find.text('Run over!'), findsNothing);

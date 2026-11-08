@@ -627,7 +627,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       final hit = _hitIndex ?? origin;
       _fx.reveal(_wave(origin, dug));
       if (run != null && blasts.isNotEmpty) {
-        _fx.heartLoss(hit, left: 0, lost: blasts.length);
+        _fx.heartLoss(hit, left: 0, lost: run.hearts, max: GardenRun.maxHearts);
       }
       _fx.blast(hit, [
         for (var i = 0; i < _field.cells.length; i++)
@@ -640,7 +640,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         _fx.blast(blast, const []);
       }
       if (run != null && blasts.isNotEmpty) {
-        _fx.heartLoss(blasts.last, left: _run!.hearts, lost: blasts.length);
+        _fx.heartLoss(
+          blasts.last,
+          left: _run!.hearts,
+          lost: run.hearts - _run!.hearts,
+          max: GardenRun.maxHearts,
+        );
       }
       if (_won) {
         _fx.bloom([
@@ -1068,7 +1073,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         final rowHeight = run == null ? 0.0 : RunHeartsRow.height;
         final dimension = math.min(
           580.0,
-          math.min(box.maxWidth, box.maxHeight - rowHeight),
+          math.min(box.maxWidth, math.max(0.0, box.maxHeight - rowHeight)),
         );
         final board = GardenBoard(
           field: _field,
