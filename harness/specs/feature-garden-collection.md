@@ -39,7 +39,7 @@ modes and shows how far the player is.
    stored. Practice, already-recorded dailies and empty runs change nothing.
 3. Set reward: when a set is complete and not yet rewarded, the next scored result (board, daily or run) adds a one-time XP
    bonus (Run Path 100 XP, Daily Beds 150 XP) through the existing XP/level/theme system and marks the set as rewarded.
-4. Result card: "New plot: <name> (N/8)" for plots earned by this result and "Set complete: <set> +X XP" for paid sets.
+4. Result card: "New plot: <name> (N/8)" for plots earned by this result (numbered one by one when several are earned) and "Set complete: <set> +X XP" for paid sets.
 5. Collection view "Garden plots N/8" with the eight plots (earned in color, others as a dim outline with their requirement)
    and a next-goal line ("Next: reach stage 5 in Garden Run"). Shown in the My Garden sheet (narrow screens) and in the wide
    layout's right column. It never blocks the board.

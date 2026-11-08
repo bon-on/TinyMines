@@ -142,6 +142,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// First-run tips above the board (feature-first-run-onboarding); shown
   /// while the tutorial flag is unset and the player has not hidden them.
   bool _onboarding = false;
+  bool _onboardingDug = false;
   bool _onboardingFlagged = false;
   bool _gameplayActive = false;
   bool _appActive = true;
@@ -179,6 +180,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// The cleared stage was a boss that restored a heart.
   bool _healedOnClear = false;
+
+  /// Hearts won back on boss stages in this run (for the copied result).
+  int _runHeals = 0;
   Timer? _advanceTimer;
 
   /// A board tap made while the tutorial check was pending:
@@ -297,7 +301,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   OnboardingStep get _onboardingStep {
     if (_onboardingFlagged) return OnboardingStep.chord;
-    return _runStarted || _field.armed
+    // Sticky: a new board does not bring back the first tip.
+    return _onboardingDug || _runStarted || _field.armed
         ? OnboardingStep.numbers
         : OnboardingStep.start;
   }
@@ -483,6 +488,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _run = const GardenRunState();
     _runFinalized = false;
     _runParticipated = false;
+    _runHeals = 0;
     _runBankedMs = 0;
     _loadStage();
   }
@@ -511,6 +517,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     final before = _run!.hearts;
     _run = _run!.clearStage();
     _healedOnClear = _run!.hearts > before;
+    if (_healedOnClear) _runHeals++;
     _stageDone = true;
     _advanceTimer?.cancel();
     _advanceTimer = Timer(const Duration(milliseconds: 1800), _advanceStage);
@@ -549,7 +556,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         stagesCleared: run.cleared,
         seconds: _runSeconds,
         outcome: outcome,
-        heartsLeft: run.hearts,
+        heartsHealed: _runHeals,
       );
       _summaryOpen = true;
     });
@@ -633,6 +640,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       if (_run != null) _runParticipated = true;
       _startTimer();
     }
+    _onboardingDug = true;
     _moves++;
     _afterReveal(index, before);
   }

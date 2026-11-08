@@ -105,6 +105,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a new board does not bring back the first tip', (tester) async {
+    await _pump(tester);
+    await tester.tap(_tiles.at(0));
+    await tester.pump();
+    await tester.tap(find.text('Normal 9x9'));
+    await tester.pumpAndSettle();
+    expect(find.text('A number counts the moles touching it.'), findsOne);
+  });
+
   testWidgets('the first finished board ends the tips and stores the flag', (
     tester,
   ) async {

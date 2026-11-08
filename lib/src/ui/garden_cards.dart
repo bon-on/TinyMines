@@ -705,6 +705,12 @@ class GardenPlotsCard extends StatelessWidget {
           Text(
             progress.rewardedSets.contains(set.id)
                 ? '${set.label} - complete'
+                : GardenPlots.isSetComplete(
+                    set,
+                    bestRunStage: progress.bestRunStage,
+                    dailyClears: progress.dailyClears,
+                  )
+                ? '${set.label} - +${set.bonusXp} XP on your next result'
                 : '${set.label} - +${set.bonusXp} XP when complete',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

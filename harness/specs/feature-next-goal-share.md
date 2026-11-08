@@ -43,7 +43,8 @@ give a reason for one more play. Tiny Mines has neither.
    - regular board: `Tiny Mines - Easy 6x6` then `Cleared in 1:23 (best 1:10)` or `A mole won this time.`, then
      `Garden Lv N`;
    - daily: `Tiny Mines - Daily Garden 2026-11-09`, `Cleared in 1:05` or `A mole won today.`, `Streak: N days`;
-   - Garden Run: `Tiny Mines - Garden Run`, `Reached stage S, cleared C gardens in m:ss`, `Hearts: H/3 | Best stage: B`;
+   - Garden Run: `Tiny Mines - Garden Run`, `Reached stage S, cleared C gardens in m:ss`, `Hearts: 3 | Best stage: B` (or `Hearts: 3 + N from bosses` when boss stages won hearts back;
+     a shown run always ends at 0 hearts, so the line reports the hearts used);
    - a last line with the share link when the build has one (see the ADR); none otherwise.
    Copy uses Flutter's clipboard and, on web, a hidden textarea + `execCommand('copy')` fallback. The button shows "Copied!"
    or "Could not copy" for two seconds and never throws. Copying sends no network request, opens no page and does not change

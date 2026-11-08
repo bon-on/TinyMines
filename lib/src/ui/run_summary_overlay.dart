@@ -26,7 +26,7 @@ class RunReport {
     this.dailyDay,
   }) : stageReached = null,
        stagesCleared = 0,
-       heartsLeft = 0;
+       heartsHealed = 0;
 
   /// End of a Garden Run: [seconds] is the whole run, [won] means at least
   /// one board was cleared.
@@ -35,7 +35,7 @@ class RunReport {
     required this.stagesCleared,
     required this.seconds,
     required this.outcome,
-    this.heartsLeft = 0,
+    this.heartsHealed = 0,
   }) : won = stagesCleared > 0,
        difficulty = null,
        daily = false,
@@ -55,8 +55,9 @@ class RunReport {
   final int? stageReached;
   final int stagesCleared;
 
-  /// Garden Run only: hearts left when the run ended.
-  final int heartsLeft;
+  /// Garden Run only: hearts won back on boss stages (a shown run always
+  /// ends at 0 hearts, so the copy text reports the hearts it used).
+  final int heartsHealed;
 
   /// Daily boards: the day key (YYYY-MM-DD) of the board.
   final String? dailyDay;
@@ -464,14 +465,16 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                 textColor: const Color(0xFF3B1830),
               ),
             ),
-        for (final plot in outcome.newPlots)
+        for (final (i, plot) in outcome.newPlots.indexed)
           if (barT >= 1)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: _Pill(
+                // Counted one by one when a result earns several plots.
                 text:
                     'New plot: ${plot.label} '
-                    '(${outcome.progress.earnedPlots.length}/${GardenPlots.total})',
+                    '(${outcome.progress.earnedPlots.length - outcome.newPlots.length + i + 1}'
+                    '/${GardenPlots.total})',
                 color: palette.flowerCenter,
                 textColor: const Color(0xFF3B2A05),
               ),

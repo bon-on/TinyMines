@@ -17,8 +17,9 @@ String resultShareText(RunReport report, {String? link}) {
         'garden${cleared == 1 ? '' : 's'} in ${formatTime(report.seconds)}',
       )
       ..add(
-        'Hearts: ${report.heartsLeft}/${GardenRun.maxHearts} | '
-        'Best stage: ${progress.bestRunStage}',
+        'Hearts: ${GardenRun.startHearts}'
+        '${report.heartsHealed > 0 ? ' + ${report.heartsHealed} from bosses' : ''}'
+        ' | Best stage: ${progress.bestRunStage}',
       );
   } else if (report.daily) {
     lines

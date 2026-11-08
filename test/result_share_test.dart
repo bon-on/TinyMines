@@ -66,7 +66,7 @@ RunReport _daily({bool practice = false}) {
   );
 }
 
-RunReport _garden() {
+RunReport _garden({int healed = 1}) {
   final outcome = const GardenProgress.initial().applyGardenRun(
     const GardenRunResult(
       stageReached: 7,
@@ -79,7 +79,7 @@ RunReport _garden() {
     stagesCleared: 6,
     seconds: 252,
     outcome: outcome,
-    heartsLeft: 0,
+    heartsHealed: healed,
   );
 }
 
@@ -169,7 +169,11 @@ void main() {
         text,
         'Tiny Mines - Garden Run\n'
         'Reached stage 7, cleared 6 gardens in 4:12\n'
-        'Hearts: 0/3 | Best stage: 7',
+        'Hearts: 3 + 1 from bosses | Best stage: 7',
+      );
+      expect(
+        resultShareText(_garden(healed: 0)).split('\n').last,
+        'Hearts: 3 | Best stage: 7',
       );
     });
 
