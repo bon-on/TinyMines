@@ -52,6 +52,13 @@ if grep -rq -i 'crazygames-sdk' "$OUT" --include='*.html' --include='*.js'; then
   exit 1
 fi
 
+# Copied results carry no link in this build (adr-share-link-per-flavor): the
+# compiled code must contain neither portal nor Bon-on URLs.
+if grep -rq -i -e 'crazygames' -e 'bon-on.github.io' "$OUT" --include='*.js'; then
+  echo "error: crazygames or bon-on.github.io string found in the GamePix JavaScript" >&2
+  exit 1
+fi
+
 # Debug symbol files are not needed at runtime.
 find "$OUT" -name '*.symbols' -delete
 rm -f "$OUT/.last_build_id"

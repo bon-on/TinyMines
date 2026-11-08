@@ -15,6 +15,7 @@ class _FakeSdk {
     this.environment = 'local',
     this.initResult,
     bool withListener = false,
+    String? link,
   }) {
     settings.setProperty('muteAudio'.toJS, false.toJS);
     final game = JSObject()
@@ -27,6 +28,7 @@ class _FakeSdk {
         'gameplayStop'.toJS,
         (() => calls.add('gameplayStop')).toJS,
       );
+    if (link != null) game.setProperty('link'.toJS, link.toJS);
     if (withListener) {
       game.setProperty(
         'addSettingsChangeListener'.toJS,
@@ -151,5 +153,34 @@ void main() {
     await platform.initialize();
     platform.gameplayStart();
     expect(sdk.calls, <String>['gameplayStart']);
+  });
+
+  test('share link: only a valid https CrazyGames game.link', () async {
+    final none = CrazyGamesPlatform();
+    _removeSdk();
+    await none.initialize();
+    expect(none.shareLink, isNull, reason: 'no SDK');
+
+    _FakeSdk();
+    final missing = CrazyGamesPlatform();
+    await missing.initialize();
+    expect(missing.shareLink, isNull, reason: 'no game.link');
+
+    _FakeSdk(link: 'https://www.crazygames.com/game/tiny-mines');
+    final good = CrazyGamesPlatform();
+    await good.initialize();
+    expect(good.shareLink, 'https://www.crazygames.com/game/tiny-mines');
+
+    for (final bad in const [
+      'http://www.crazygames.com/game/tiny-mines',
+      'https://bon-on.github.io/TinyMines/',
+      'https://crazygames.com.evil.example/x',
+      'javascript:alert(1)',
+    ]) {
+      _FakeSdk(link: bad);
+      final platform = CrazyGamesPlatform();
+      await platform.initialize();
+      expect(platform.shareLink, isNull, reason: bad);
+    }
   });
 }

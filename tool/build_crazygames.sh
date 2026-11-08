@@ -44,6 +44,12 @@ if grep -q -e 'games-nav-bar"' -e 'bon-on.github.io' "$INDEX"; then
   echo "error: hub navigation link still present in index.html" >&2
   exit 1
 fi
+# Copied results may only link to the CrazyGames page (SDK game.link); the
+# Pages link must be tree-shaken out (adr-share-link-per-flavor).
+if grep -rq 'bon-on.github.io' "$OUT" --include='*.js'; then
+  echo "error: bon-on.github.io string found in the CrazyGames JavaScript" >&2
+  exit 1
+fi
 if ! grep -q -e '--games-nav-height: 0px;' "$INDEX"; then
   echo "error: hub navigation height was not reset" >&2
   exit 1

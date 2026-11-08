@@ -29,12 +29,28 @@ abstract class GamePlatform {
   /// Registers a callback for when [isAudioMuted] may have changed (portal
   /// mute setting). Platforms without such events ignore it.
   void setAudioMuteListener(void Function()? listener) {}
+
+  /// Public game page appended to copied results (feature-next-goal-share,
+  /// adr-share-link-per-flavor); null copies text only. It is only text:
+  /// the game never opens it.
+  String? get shareLink => null;
 }
+
+/// GitHub Pages game page used in copied results of the Pages and mobile
+/// builds. Referenced only from non-portal factory branches, so neither the
+/// GamePix nor the CrazyGames bundle contains it.
+const String pagesShareLink = 'https://bon-on.github.io/TinyMines/';
 
 class NoopGamePlatform extends GamePlatform {
   /// [allowsResultRegistration] is false for portal builds without an SDK
   /// (GamePix, `--dart-define=GAMEPIX=true`): no external network calls.
-  const NoopGamePlatform({this.allowsResultRegistration = true});
+  const NoopGamePlatform({
+    this.allowsResultRegistration = true,
+    this.shareLink,
+  });
+
+  @override
+  final String? shareLink;
 
   @override
   Future<void> initialize() async {}

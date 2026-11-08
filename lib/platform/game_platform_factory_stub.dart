@@ -1,3 +1,5 @@
 import 'game_platform.dart';
 
-GamePlatform createGamePlatform() => const NoopGamePlatform();
+/// Mobile builds: no portal; copied results link to the Pages game.
+GamePlatform createGamePlatform() =>
+    const NoopGamePlatform(shareLink: pagesShareLink);

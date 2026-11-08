@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +8,8 @@ import '../art/garden_tile_art.dart';
 import '../game/difficulty.dart';
 import '../meta/garden_progress.dart';
 import '../meta/next_goal.dart';
+import '../share/result_copy.dart';
+import '../share/result_text.dart';
 import 'garden_cards.dart';
 import 'garden_ui.dart';
 
@@ -18,8 +22,10 @@ class RunReport {
     required this.outcome,
     this.daily = false,
     this.practice = false,
+    this.dailyDay,
   }) : stageReached = null,
-       stagesCleared = 0;
+       stagesCleared = 0,
+       heartsLeft = 0;
 
   /// End of a Garden Run: [seconds] is the whole run, [won] means at least
   /// one board was cleared.
@@ -28,10 +34,12 @@ class RunReport {
     required this.stagesCleared,
     required this.seconds,
     required this.outcome,
+    this.heartsLeft = 0,
   }) : won = stagesCleared > 0,
        difficulty = null,
        daily = false,
-       practice = false;
+       practice = false,
+       dailyDay = null;
 
   final bool won;
 
@@ -45,6 +53,12 @@ class RunReport {
   /// Garden Run only: the stage the run ended on and the boards cleared.
   final int? stageReached;
   final int stagesCleared;
+
+  /// Garden Run only: hearts left when the run ended.
+  final int heartsLeft;
+
+  /// Daily boards: the day key (YYYY-MM-DD) of the board.
+  final String? dailyDay;
 
   bool get garden => stageReached != null;
 }
@@ -65,6 +79,8 @@ class RunSummaryOverlay extends StatefulWidget {
     this.onPractice,
     this.onShown,
     this.onTryGardenRun,
+    this.shareLink,
+    this.copier = const ResultCopier(),
     this.delay = const Duration(milliseconds: 750),
   });
 
@@ -85,6 +101,10 @@ class RunSummaryOverlay extends StatefulWidget {
   /// Shows the "Try Garden Run" call to action (regular win before the
   /// first run); null hides it.
   final VoidCallback? onTryGardenRun;
+
+  /// Link appended to the copied result; null copies text only.
+  final String? shareLink;
+  final ResultCopier copier;
   final Duration delay;
 
   @override
@@ -103,6 +123,31 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
   final FocusNode _playAgainFocus = FocusNode(debugLabel: 'play-again');
   bool _shownReported = false;
 
+  /// "Copied!" / "Could not copy" shown on the copy button for a moment.
+  String? _copyNote;
+  Timer? _copyTimer;
+  bool _copying = false;
+
+  Future<void> _copy() async {
+    if (_copying) return;
+    _copying = true;
+    var ok = false;
+    try {
+      ok = await widget.copier.copyText(
+        resultShareText(widget.report, link: widget.shareLink),
+      );
+    } catch (_) {
+      ok = false;
+    }
+    _copying = false;
+    if (!mounted) return;
+    _copyTimer?.cancel();
+    setState(() => _copyNote = ok ? 'Copied!' : 'Could not copy');
+    _copyTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copyNote = null);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -120,6 +165,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
 
   @override
   void dispose() {
+    _copyTimer?.cancel();
     _controller.dispose();
     _focus.dispose();
     _playAgainFocus.dispose();
@@ -466,13 +512,39 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
           ],
         ),
         const SizedBox(height: 4),
-        TextButton(
-          onPressed: widget.onClose,
-          style: TextButton.styleFrom(foregroundColor: palette.textSecondary),
-          child: const Text(
-            'View board',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 4,
+          children: [
+            if (!report.practice)
+              TextButton.icon(
+                key: const ValueKey('copy-result'),
+                onPressed: _copy,
+                style: TextButton.styleFrom(
+                  foregroundColor: palette.textSecondary,
+                ),
+                icon: Icon(
+                  _copyNote == 'Copied!'
+                      ? Icons.check_rounded
+                      : Icons.content_copy_rounded,
+                  size: 18,
+                ),
+                label: Text(
+                  _copyNote ?? 'Copy result',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            TextButton(
+              onPressed: widget.onClose,
+              style: TextButton.styleFrom(
+                foregroundColor: palette.textSecondary,
+              ),
+              child: const Text(
+                'View board',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
         ),
       ],
     );

@@ -13,8 +13,14 @@ GamePlatform selectGamePlatform({
 }) {
   if (crazyGames) return CrazyGamesPlatform();
   if (gamePix) return const NoopGamePlatform(allowsResultRegistration: false);
-  return const NoopGamePlatform();
+  return const NoopGamePlatform(shareLink: pagesShareLink);
 }
 
-GamePlatform createGamePlatform() =>
-    selectGamePlatform(crazyGames: _crazyGamesBuild, gamePix: _gamePixBuild);
+/// One conditional expression over compile-time constants, so the unused
+/// branches (the CrazyGames adapter, the Pages link) are tree-shaken from
+/// portal bundles (adr-share-link-per-flavor; checked by the build scripts).
+GamePlatform createGamePlatform() => _crazyGamesBuild
+    ? CrazyGamesPlatform()
+    : _gamePixBuild
+    ? const NoopGamePlatform(allowsResultRegistration: false)
+    : const NoopGamePlatform(shareLink: pagesShareLink);

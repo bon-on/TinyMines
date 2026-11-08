@@ -4,6 +4,7 @@ import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
+import 'crazygames_link.dart';
 import 'crazygames_prefs_store.dart';
 import 'game_platform.dart';
 
@@ -128,6 +129,23 @@ class CrazyGamesPlatform extends GamePlatform {
 
   @override
   bool get allowsResultRegistration => false;
+
+  /// The game page reported by the SDK (`game.link`), accepted only as an
+  /// https CrazyGames URL; otherwise copied results carry no link. The game
+  /// never navigates to it.
+  @override
+  String? get shareLink {
+    final sdk = _sdk;
+    if (sdk == null) return null;
+    try {
+      final link = sdk.game.getProperty<JSAny?>('link'.toJS);
+      if (link == null || !link.isA<JSString>()) return null;
+      return crazyGamesLinkOrNull((link as JSString).toDart);
+    } catch (error) {
+      debugPrint('CrazyGames SDK link unavailable: $error');
+      return null;
+    }
+  }
 
   @override
   bool get isAudioMuted {

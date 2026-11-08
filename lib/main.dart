@@ -22,6 +22,7 @@ import 'src/ui/garden_board.dart';
 import 'src/ui/garden_cards.dart';
 import 'src/ui/garden_ui.dart';
 import 'src/ui/onboarding_strip.dart';
+import 'src/share/result_copy.dart';
 import 'src/ui/run_summary_overlay.dart';
 
 Future<void> main() async {
@@ -90,7 +91,11 @@ class TinyMinesScreen extends StatefulWidget {
     this.stopwatch,
     this.soundFx,
     this.now,
+    this.resultCopier = const ResultCopier(),
   });
+
+  /// Clipboard access for "Copy result"; tests inject a fake.
+  final ResultCopier resultCopier;
 
   /// Sound effects, music and mute switch; defaults to the real player.
   final SoundFx? soundFx;
@@ -544,6 +549,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         stagesCleared: run.cleared,
         seconds: _runSeconds,
         outcome: outcome,
+        heartsLeft: run.hearts,
       );
       _summaryOpen = true;
     });
@@ -743,6 +749,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         seconds: seconds,
         daily: _dailyDay != null,
         practice: _dailyPractice,
+        dailyDay: _dailyDay,
         outcome: outcome,
       );
       _summaryOpen = true;
@@ -841,6 +848,15 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _closeSummary() => setState(() => _summaryOpen = false);
+
+  /// The build's link for copied results (adr-share-link-per-flavor).
+  String? get _shareLink {
+    try {
+      return widget.platform.shareLink;
+    } catch (_) {
+      return null;
+    }
+  }
 
   String get _status {
     final run = _run;
@@ -959,6 +975,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     : null,
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
+                shareLink: _shareLink,
+                copier: widget.resultCopier,
                 onTryGardenRun:
                     !report.garden &&
                         !report.daily &&
