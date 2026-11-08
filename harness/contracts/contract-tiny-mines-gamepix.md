@@ -4,6 +4,7 @@ title: Tiny Mines GamePix web distribution contract
 status: active
 related_specs:
   - feature-tiny-mines-gamepix
+  - feature-next-goal-share
 evidence_files:
   - docs/gamepix.md
   - reports/tiny-mines-gamepix-verification.md

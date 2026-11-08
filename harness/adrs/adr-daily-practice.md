@@ -4,6 +4,7 @@ title: Keep daily practice separate from scored progress
 status: accepted
 related_specs:
   - feature-daily-practice
+  - feature-garden-collection
 ---
 
 # Daily practice accounting

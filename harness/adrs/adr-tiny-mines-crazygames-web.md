@@ -11,6 +11,9 @@ related_specs:
   - feature-crazygames-quality-recovery
   - feature-daily-practice
   - feature-garden-run
+  - feature-first-run-onboarding
+  - feature-next-goal-share
+  - feature-garden-collection
 ---
 
 # ADR: Build flag and platform adapter for CrazyGames

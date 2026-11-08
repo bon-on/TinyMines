@@ -8,6 +8,9 @@ related_specs:
   - feature-daily-practice
   - feature-crazygames-quality-recovery
   - feature-garden-run
+  - feature-first-run-onboarding
+  - feature-next-goal-share
+  - feature-garden-collection
 evidence_files:
   - reports/tiny-mines-gameplay-verification.md
 ---

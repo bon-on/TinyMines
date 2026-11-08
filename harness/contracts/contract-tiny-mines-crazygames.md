@@ -8,6 +8,8 @@ related_specs:
   - feature-retention-polish
   - feature-crazygames-cloud-save
   - feature-garden-run
+  - feature-next-goal-share
+  - feature-garden-collection
 evidence_files:
   - docs/crazygames.md
   - reports/tiny-mines-crazygames-verification.md

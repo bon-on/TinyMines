@@ -44,8 +44,9 @@ is one button among many and nothing points a new player to it.
    shown), write failures are ignored. No new key.
 4. Garden Run call to action: while the player has never finished a Garden Run (`runsPlayed == 0`), the Garden Run entry is
    shown as a highlighted card "Try Garden Run: 3 hearts, bigger gardens" with a start button, on first launch and on every
-   layout (narrow: replaces the plain entry button above the board; wide: the left column card). After the first regular
-   (not daily) board win while `runsPlayed == 0`, the result card shows the same call to action as a button. None of these
+   layout (narrow: replaces the plain entry button above the board; wide: the left column card). After a regular
+   (not daily) board win while `runsPlayed == 0` (so from the first such win on), the result card shows the same call to
+   action as a button. None of these
    block board input. Once a run has been played the entry returns to the regular card with the best stage.
 5. The board taps made while the flag read is pending are still remembered and applied once it answers (it no longer opens a
    card that would discard them).
