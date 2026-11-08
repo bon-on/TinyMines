@@ -164,6 +164,8 @@ void main() {
     await _pump(tester, tutorial: _Store(seen: true));
     await _winEasy(tester);
     expect(find.text('Garden cleared!'), findsOneWidget);
+    expect(find.byKey(const ValueKey('next-goal')), findsOneWidget);
+    expect(find.text('Play your first Garden Run'), findsOneWidget);
     final inSummary = find.descendant(
       of: find.byType(SingleChildScrollView),
       matching: _cta,

@@ -5,6 +5,7 @@ import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
 import '../game/difficulty.dart';
 import '../meta/garden_progress.dart';
+import '../meta/next_goal.dart';
 import 'garden_cards.dart';
 import 'garden_ui.dart';
 
@@ -409,7 +410,9 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
             ),
           ),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        NextGoalBlock(palette: palette, goals: nextGoals(outcome.progress)),
+        const SizedBox(height: 14),
         if (widget.onPractice != null) ...[
           Text(
             report.practice
@@ -472,6 +475,113 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
           ),
         ),
       ],
+    );
+  }
+}
+
+/// "Next goal" box: the closest goal with its numbers and a bar, then up to
+/// two more goals as one short line each (feature-next-goal-share).
+class NextGoalBlock extends StatelessWidget {
+  const NextGoalBlock({super.key, required this.palette, required this.goals});
+
+  final GardenPalette palette;
+  final List<NextGoal> goals;
+
+  static IconData iconFor(GoalKind kind) => switch (kind) {
+    GoalKind.level => Icons.trending_up_rounded,
+    GoalKind.plot => Icons.yard_rounded,
+    GoalKind.run => Icons.favorite_rounded,
+    GoalKind.theme => Icons.palette_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    if (goals.isEmpty) return const SizedBox.shrink();
+    final top = goals.first;
+    final dim = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      color: palette.textSecondary,
+    );
+    return Container(
+      key: const ValueKey('next-goal'),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: palette.textSecondary.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: palette.accent,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  iconFor(top.kind),
+                  size: 20,
+                  color: palette.onAccent,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PanelCaption('Next goal', palette: palette),
+                    Text(
+                      top.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: palette.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      top.detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: dim,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GardenProgressBar(palette: palette, value: top.fraction, height: 8),
+          for (final goal in goals.skip(1))
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    iconFor(goal.kind),
+                    size: 14,
+                    color: palette.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${goal.title} - ${goal.detail}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: dim,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
