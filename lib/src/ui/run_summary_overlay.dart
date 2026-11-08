@@ -244,8 +244,27 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                                   22,
                                   16,
                                 ),
-                                child: SingleChildScrollView(
-                                  child: _content(palette),
+                                // Actions stay pinned under the scrolling
+                                // details so they are visible on short
+                                // screens (844x390) without scrolling.
+                                child: LayoutBuilder(
+                                  builder: (context, box) {
+                                    final short = box.maxHeight < 480;
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: SingleChildScrollView(
+                                            child: _content(
+                                              palette,
+                                              short: short,
+                                            ),
+                                          ),
+                                        ),
+                                        _actions(palette, short: short),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ),
                             ),
@@ -262,7 +281,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
     );
   }
 
-  Widget _content(GardenPalette palette) {
+  Widget _content(GardenPalette palette, {required bool short}) {
     final report = widget.report;
     final outcome = report.outcome;
     final garden = report.garden;
@@ -296,16 +315,16 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
           child: TileArt(
             palette: palette,
             look: report.won ? TileLook.flower : TileLook.moleHit,
-            size: 76,
+            size: short ? 44 : 76,
             seed: 4,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: short ? 2 : 6),
         Text(
           title,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 26,
+            fontSize: short ? 22 : 26,
             fontWeight: FontWeight.w900,
             color: report.won ? textPrimary : palette.danger,
           ),
@@ -482,15 +501,28 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
         const SizedBox(height: 14),
         NextGoalBlock(palette: palette, goals: nextGoals(outcome.progress)),
         const SizedBox(height: 14),
+      ],
+    );
+  }
+
+  Widget _actions(GardenPalette palette, {required bool short}) {
+    final report = widget.report;
+    final garden = report.garden;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(height: short ? 8 : 12),
         if (widget.onPractice != null) ...[
-          Text(
-            report.practice
-                ? 'No XP or records. Your original daily result is unchanged.'
-                : 'Retry this board for practice. Your daily result stays saved.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: palette.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
+          if (!short) ...[
+            Text(
+              report.practice
+                  ? 'No XP or records. Your original daily result is unchanged.'
+                  : 'Retry this board for practice. Your daily result stays saved.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+          ],
           GardenButton(
             palette: palette,
             label: 'Practice same board',

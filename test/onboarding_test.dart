@@ -9,6 +9,7 @@ import 'package:tiny_mines/mine_field.dart';
 import 'package:tiny_mines/platform/game_platform.dart';
 import 'package:tiny_mines/src/meta/garden_progress.dart';
 import 'package:tiny_mines/src/meta/garden_progress_store.dart';
+import 'package:tiny_mines/src/ui/run_summary_overlay.dart';
 
 import 'support/fake_stopwatch.dart';
 
@@ -167,7 +168,7 @@ void main() {
     expect(find.byKey(const ValueKey('next-goal')), findsOneWidget);
     expect(find.text('Play your first Garden Run'), findsOneWidget);
     final inSummary = find.descendant(
-      of: find.byType(SingleChildScrollView),
+      of: find.byType(RunSummaryOverlay),
       matching: _cta,
     );
     expect(inSummary, findsOneWidget);
