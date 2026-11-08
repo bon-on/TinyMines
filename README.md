@@ -20,8 +20,20 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   next stage starts by itself. XP is paid once when the run ends (15 per
   cleared board + 10 for taking part); `runsPlayed` and `bestRunStage` are
   saved in `garden_progress_v1`. Normal records and the daily are untouched.
+- Garden plots: eight code-drawn plots in two sets. Run Path is earned by
+  the Garden Run best stage (2, 3, 5, 7), Daily Beds by scored daily clears
+  (1, 2, 4, 7). A complete set pays a one-time XP bonus (100 / 150 XP). The
+  collection (N/8 and the next plot) is in My Garden and, on wide screens,
+  in the right column. `dailyClears` and `rewardedSets` are stored in
+  `garden_progress_v1` (old saves derive `dailyClears` from the daily
+  history).
 - Every finished run opens a summary (time, best, New best!, XP, level bar,
-  unlocks). Enter plays again, Escape shows the board.
+  unlocks, new plots) with a Next goal block (next level and theme, Garden
+  Run target or the closest plot). Enter plays again, Escape shows the board.
+- Copy result puts a short ASCII summary on the clipboard. Pages and mobile
+  builds append https://bon-on.github.io/TinyMines/, CrazyGames only a
+  valid CrazyGames `game.link` from the SDK, GamePix no link. The game never
+  opens the link.
 
 ## Local Web Build
 
@@ -39,9 +51,15 @@ GitHub Pages deploys from `.github/workflows/deploy-pages.yml`.
 
 `tool/build_gamepix.sh` builds `build/gamepix/` and the upload zip `build/tiny-mines-gamepix.zip` (SDK-free; no hub link, leaderboard or ads). See `docs/gamepix.md`. Roboto is bundled in `assets/fonts/` (see `assets/fonts/Roboto_LICENSE.txt`) so web builds make no font requests.
 
-## Tutorial
+## First run and tutorial
 
-A short how-to-play card appears on first launch (skip with Esc or the Skip button). The `?` button in the header reopens it.
+The board is playable right away. First-time players see a short tip strip
+above the board (safe first dig, what numbers mean, flags, chord) that can be
+hidden with its close button; it also ends after the first finished board.
+The full how-to-play card is behind the `?` button (skip with Esc or Skip).
+Both use the `tutorial_seen_v1` flag. Until the first Garden Run is played,
+a "Try Garden Run" call to action replaces the plain Garden Run entry and
+also appears on the result card after a regular win.
 
 ## Sound
 

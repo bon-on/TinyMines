@@ -41,8 +41,8 @@ On `localhost` the SDK environment is `local`; the console shows `Requesting gam
 | When | Call |
 |---|---|
 | App start | `SDK.init()`; the SDK is disabled unless `environment` is `crazygames` or `local` |
-| Tutorial check done, no overlay | `gameplayStart()` (first launch: only after the overlay closes) |
-| How-to-play overlay opens | `gameplayStop()` |
+| Tutorial check done, no overlay | `gameplayStart()` (first launch too: the board is playable under a tip strip, no modal) |
+| How-to-play overlay (`?`) opens | `gameplayStop()` |
 | Overlay closes | `gameplayStart()` |
 | Game over / field cleared | `gameplayStop()` |
 | Restart, new field, difficulty switch | `gameplayStart()` |
@@ -53,6 +53,8 @@ On `localhost` the SDK environment is `local`; the console shows `Requesting gam
 | App resumed with no help/garden/result overlay | `gameplayStart()`; active solve clock resumes |
 
 Calls are sent on transitions only. Leaderboard registration prompts are disabled in this build, and there are no ads.
+
+Copy result (result card) never calls the SDK gameplay methods and never navigates. In this build the copied text ends with `SDK.game.link` only when it is an `https` URL on a CrazyGames host without port or user info; otherwise it has no link. The build script fails if the JavaScript contains the GitHub Pages URL.
 
 Sound: effects are muted while `SDK.game.settings.muteAudio` is true (read on every sound), in addition to the player's own sound toggle.
 
@@ -74,6 +76,17 @@ Sound: effects are muted while `SDK.game.settings.muteAudio` is true (read on ev
   to a different player or logs out. If the initial user cannot be determined, account saving is not enabled.
 - The board is a square grid; Easy/Normal/Hard are selectable.
 - Roboto is bundled (`assets/fonts/`), so the app does not fetch it from a Google font CDN.
+
+## Resubmission after the second quality rejection (2026-11-09)
+
+The reviewed build predates Garden Run. Changes for the resubmission (specs `feature-garden-run`, `feature-first-run-onboarding`, `feature-next-goal-share`, `feature-garden-collection`):
+
+- First impression: no modal on first launch. The board is playable at once with a dismissible tip strip; the how-to-play card stays behind `?`.
+- Garden Run (3 hearts, stages 5x5 to 12x12, boss gardens heal) is promoted with a "Try Garden Run" call to action on the first screen and on the result card until the first run.
+- Result card: Next goal (level/theme, Garden Run best stage, closest garden plot), pinned actions on short screens, and Copy result (text only).
+- Garden plot collection: eight code-drawn plots earned by Garden Run stages and daily clears, with one-time set XP bonuses; saved in `garden_progress_v1`, which the Data module already syncs.
+
+Verification and the store text draft: `reports/crazygames-resubmission-2026-11-09.md`. Local verification does not claim platform acceptance.
 
 ## Quality recovery (2026-11-07)
 

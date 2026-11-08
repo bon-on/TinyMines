@@ -18,7 +18,8 @@ The script runs `flutter build web --release --base-href / --no-web-resources-cd
 1. sets `<base href="./">`;
 2. removes the Bon-on hub navigation bar and sets its height to 0, and drops the template comment with an external URL;
 3. checks that `index.html` has no `crazygames`/`bon-on.github.io` text, no external script or link, and that `FontManifest.json` lists Roboto;
-4. deletes `*.symbols`, zips the folder, verifies `index.html` is at the zip root and prints the file count, size and the number of `crazygames` strings left in `main.dart.js`.
+4. fails if any bundled JavaScript contains `crazygames` or `bon-on.github.io` (copied results carry no link in this build, `adr-share-link-per-flavor`);
+5. deletes `*.symbols`, zips the folder, verifies `index.html` is at the zip root and prints the file count, size and the number of `crazygames` strings left in `main.dart.js`.
 
 Roboto is bundled in `assets/fonts/` (license: `assets/fonts/Roboto_LICENSE.txt`), so the app never downloads it from fonts.gstatic.com.
 
