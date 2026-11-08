@@ -41,6 +41,11 @@ Finder _hudStage(int stage) => find.descendant(
 Finder _hintCount(int count) =>
     find.descendant(of: find.byType(Badge), matching: find.text('$count'));
 
+Finder get _bigHearts => find.descendant(
+  of: find.byKey(const ValueKey('board-hearts')),
+  matching: find.byIcon(Icons.favorite_rounded),
+);
+
 Finder get _fullHearts => find.descendant(
   of: find.byKey(const ValueKey('run-hearts')),
   matching: find.byIcon(Icons.favorite_rounded),
@@ -316,39 +321,99 @@ void main() {
     expect(store.saveCount, 0);
   });
 
-  testWidgets('boss stage heals a heart; hints grow every third clear', (
+  for (final loseHeart in [true, false]) {
+    testWidgets(
+      loseHeart
+          ? 'boss stage heals a lost heart; hints grow every third clear'
+          : 'boss stage at full hearts says nothing about a heart',
+      (tester) async {
+        final store = MemoryGardenProgressStore();
+        await _pump(tester, store: store);
+        await _startRun(tester);
+        final garden = _Garden();
+        final firsts = {1: 12, 2: 14, 3: 24, 4: 27, 5: 27};
+        final ref1 = garden.stage(1, firsts[1]!);
+        if (loseHeart) {
+          await _tap(tester, firsts[1]!);
+          await _tap(tester, _moles(ref1).first);
+          expect(_fullHearts, findsNWidgets(2));
+        }
+        await _clear(tester, ref1, firsts[1]!);
+        await tester.pump(const Duration(seconds: 3));
+        for (var stage = 2; stage <= 5; stage++) {
+          expect(_hudStage(stage), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('boss-tag')),
+            stage == 5 ? findsOneWidget : findsNothing,
+          );
+          final ref = garden.stage(stage, firsts[stage]!);
+          await _clear(tester, ref, firsts[stage]!);
+          await tester.pump(const Duration(milliseconds: 100));
+          if (stage == 3) {
+            // Third clear: one more hint (3 -> 4).
+            expect(_hintCount(4), findsOneWidget);
+          }
+          if (stage < 5) await tester.pump(const Duration(seconds: 3));
+        }
+        expect(
+          find.text(
+            loseHeart
+                ? 'Boss garden cleared! +1 heart.'
+                : 'Boss garden cleared!',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('+1 heart'),
+          loseHeart ? findsOneWidget : findsNothing,
+        );
+        expect(_fullHearts, findsNWidgets(3));
+        expect(store.saveCount, 0);
+      },
+    );
+  }
+
+  testWidgets('a mole shows the Heart lost overlay and the big hearts update', (
     tester,
   ) async {
-    final store = MemoryGardenProgressStore();
-    await _pump(tester, store: store);
+    await _pump(tester);
     await _startRun(tester);
-    final garden = _Garden();
-    final firsts = {1: 12, 2: 14, 3: 24, 4: 27, 5: 27};
-    // Lose a heart on stage 1, then clear stages 1 to 5.
-    final ref1 = garden.stage(1, firsts[1]!);
-    await _tap(tester, firsts[1]!);
-    await _tap(tester, _moles(ref1).first);
-    expect(_fullHearts, findsNWidgets(2));
-    await _clear(tester, ref1, firsts[1]!);
-    await tester.pump(const Duration(seconds: 3));
-    for (var stage = 2; stage <= 5; stage++) {
-      expect(_hudStage(stage), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('boss-tag')),
-        stage == 5 ? findsOneWidget : findsNothing,
-      );
-      final ref = garden.stage(stage, firsts[stage]!);
-      await _clear(tester, ref, firsts[stage]!);
-      await tester.pump(const Duration(milliseconds: 100));
-      if (stage == 3) {
-        // Third clear: one more hint (3 -> 4).
-        expect(_hintCount(4), findsOneWidget);
-      }
-      if (stage < 5) await tester.pump(const Duration(seconds: 3));
+    expect(_bigHearts, findsNWidgets(3));
+    final ref = _Garden().stage(1, 12);
+    await _tap(tester, 12);
+    expect(find.textContaining('Heart lost!'), findsNothing);
+    await _tap(tester, _moles(ref).first);
+    // Rules apply at once; the effect trails behind.
+    expect(_bigHearts, findsNWidgets(2));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Heart lost! 2 left'), findsOneWidget);
+    // Input is not blocked while the effect plays.
+    final safe = [
+      for (var i = 0; i < 25; i++)
+        if (!ref.cells[i].mine && !ref.cells[i].revealed) i,
+    ];
+    await _tap(tester, safe.first);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.textContaining('Heart lost!'), findsNothing);
+    expect(find.text('Run over!'), findsNothing);
+  });
+
+  testWidgets('the last heart still breaks visibly before the summary', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _startRun(tester);
+    final ref = _Garden().stage(1, 12);
+    await _tap(tester, 12);
+    final moles = _moles(ref);
+    for (final mole in moles) {
+      await _tap(tester, mole);
     }
-    expect(find.textContaining('Boss garden cleared'), findsOneWidget);
-    expect(_fullHearts, findsNWidgets(3));
-    expect(store.saveCount, 0);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Heart lost! 0 left'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Run over!'), findsOneWidget);
   });
 
   group('layout', () {
@@ -357,6 +422,35 @@ void main() {
       Size(1366, 768),
       Size(390, 844),
     ]) {
+      testWidgets('the hearts row sits centered above the board at $size', (
+        tester,
+      ) async {
+        await _pump(tester, size: size);
+        await _startRun(tester);
+        final ref = _Garden().stage(1, 12);
+        for (var round = 0; round < 2; round++) {
+          expect(tester.takeException(), isNull);
+          final row = tester.getRect(
+            find.byKey(const ValueKey('board-hearts')),
+          );
+          final grid = tester.getRect(find.byType(GridView));
+          expect(row.bottom, lessThanOrEqualTo(grid.top));
+          expect(row.top, greaterThanOrEqualTo(0));
+          expect((row.center.dx - grid.center.dx).abs(), lessThan(1));
+          expect(row.height, greaterThanOrEqualTo(36));
+          expect(_bigHearts, findsNWidgets(3 - round));
+          if (round == 0) {
+            await _tap(tester, 12);
+            await _tap(tester, _moles(ref).first);
+            await tester.pump(const Duration(milliseconds: 300));
+            // The overlay and shake must not overflow either.
+            expect(tester.takeException(), isNull);
+            expect(find.text('Heart lost! 2 left'), findsOneWidget);
+          }
+        }
+        await tester.pumpAndSettle();
+      });
+
       testWidgets('a 12x12 run board and its summary fit at $size', (
         tester,
       ) async {

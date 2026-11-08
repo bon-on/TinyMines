@@ -71,6 +71,22 @@ class _SparkleEvent extends _FxEvent {
   int get lengthMs => 700;
 }
 
+/// Garden Run: a mole cost [lost] hearts. A red flash on the dug cell, then
+/// the hearts show large over the top of the board and the lost ones crack
+/// and drop.
+class _HeartLossEvent extends _FxEvent {
+  _HeartLossEvent(this.cell, this.left, this.lost, this.max);
+  final int cell;
+
+  /// Hearts still full after the loss.
+  final int left;
+  final int lost;
+  final int max;
+  static const int totalMs = 1200;
+  @override
+  int get lengthMs => totalMs;
+}
+
 /// Queue of board effects. Rules are applied by the screen right away; the
 /// effects only trail behind on a separate layer, so they never block input.
 ///
@@ -99,6 +115,23 @@ class BoardFx extends ChangeNotifier {
   void bloom(List<TimedCell> flowers) => _add(_BloomEvent(flowers));
 
   void sparkle(int cell) => _add(_SparkleEvent(cell));
+
+  /// A mole at [cell] cost [lost] hearts; [left] remain out of [max].
+  void heartLoss(int cell, {required int left, int lost = 1, int max = 3}) {
+    // A newer loss replaces an older one still playing.
+    _events.removeWhere((e) => e is _HeartLossEvent);
+    _add(_HeartLossEvent(cell, left, lost, max));
+  }
+
+  /// The heart-loss effect still running, if any (drives its label).
+  ({int left, int ageMs})? get heartLossState {
+    for (final event in _events) {
+      if (event is _HeartLossEvent) {
+        return (left: event.left, ageMs: (_clock - event.start).inMilliseconds);
+      }
+    }
+    return null;
+  }
 
   /// Drops every effect (new board).
   void clear() {
@@ -218,6 +251,12 @@ class _BoardFxLayerState extends State<BoardFxLayer>
               ),
             ),
           ),
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _frame,
+              builder: (context, _) => _heartLossLabel(),
+            ),
+          ),
         ],
       ),
       builder: (context, child) =>
@@ -225,10 +264,42 @@ class _BoardFxLayerState extends State<BoardFxLayer>
     );
   }
 
+  /// "Heart lost! N left", just under the big hearts, fading out at the end.
+  Widget _heartLossLabel() {
+    final state = widget.fx.heartLossState;
+    if (state == null) return const SizedBox.shrink();
+    final fade = _clamp01((_HeartLossEvent.totalMs - state.ageMs) / 250);
+    return Align(
+      alignment: const Alignment(0, -0.28),
+      child: Opacity(
+        opacity: fade * _clamp01(state.ageMs / 120),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xCC1B1210),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Text(
+              'Heart lost! ${state.left} left',
+              maxLines: 1,
+              style: TextStyle(
+                color: widget.palette.danger,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Offset _shake() {
     final fx = widget.fx;
     for (final event in fx._events) {
-      if (event is! _BlastEvent) continue;
+      if (event is! _BlastEvent && event is! _HeartLossEvent) continue;
       final t = (fx._clock - event.start).inMilliseconds;
       if (t < 0 || t > 420) continue;
       final decay = 1 - t / 420;
@@ -290,6 +361,8 @@ class _FxPainter extends CustomPainter {
           _paintBloom(canvas, box, event, t);
         case _SparkleEvent():
           _paintSparkle(canvas, box, event, t);
+        case _HeartLossEvent():
+          _paintHeartLoss(canvas, box, event, t);
       }
     }
   }
@@ -495,6 +568,130 @@ class _FxPainter extends CustomPainter {
           ),
       );
       canvas.restore();
+    }
+  }
+
+  static Path _heartPath(Rect r) {
+    final w = r.width;
+    final h = r.height;
+    return Path()
+      ..moveTo(r.left + w / 2, r.top + h * 0.95)
+      ..cubicTo(
+        r.left - w * 0.15,
+        r.top + h * 0.55,
+        r.left + w * 0.02,
+        r.top - h * 0.08,
+        r.left + w / 2,
+        r.top + h * 0.28,
+      )
+      ..cubicTo(
+        r.right - w * 0.02,
+        r.top - h * 0.08,
+        r.right + w * 0.15,
+        r.top + h * 0.55,
+        r.left + w / 2,
+        r.top + h * 0.95,
+      )
+      ..close();
+  }
+
+  void _paintHeartLoss(Canvas canvas, Size box, _HeartLossEvent e, int t) {
+    // Red flash on the cell that was dug.
+    if (t < 450) {
+      final rect = _cellRect(box, e.cell);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(rect.width * 0.2)),
+        Paint()..color = palette.danger.withValues(alpha: 0.65 * (1 - t / 450)),
+      );
+    }
+    // Hearts panel: fades in fast, out over the last 250 ms.
+    final alpha =
+        _clamp01(t / 120) * _clamp01((_HeartLossEvent.totalMs - t) / 250);
+    if (alpha <= 0) return;
+    final heart = math.min(box.width * 0.17, 64.0);
+    final gapX = heart * 0.22;
+    final rowWidth = e.max * heart + (e.max - 1) * gapX;
+    final top = box.height * 0.10;
+    final panel = Rect.fromLTWH(
+      (box.width - rowWidth) / 2 - heart * 0.4,
+      top - heart * 0.3,
+      rowWidth + heart * 0.8,
+      heart * 1.6,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(panel, Radius.circular(heart * 0.5)),
+      Paint()..color = Color.fromRGBO(27, 18, 16, 0.62 * alpha),
+    );
+    final breakT = _clamp01((t - 350) / 600);
+    for (var i = 0; i < e.max; i++) {
+      final rect = Rect.fromLTWH(
+        (box.width - rowWidth) / 2 + i * (heart + gapX),
+        top,
+        heart,
+        heart,
+      );
+      final path = _heartPath(rect);
+      final justLost = i >= e.left && i < e.left + e.lost;
+      if (i < e.left || (justLost && t < 200)) {
+        canvas.drawPath(
+          path,
+          Paint()..color = palette.danger.withValues(alpha: alpha),
+        );
+        continue;
+      }
+      final outline = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(2, heart * 0.07)
+        ..color = Color.fromRGBO(255, 255, 255, 0.55 * alpha);
+      if (!justLost) {
+        canvas.drawPath(path, outline);
+        continue;
+      }
+      // Crack, then the two halves fall apart and fade.
+      final fall = breakT * breakT;
+      final fade = (1 - breakT) * alpha;
+      for (final side in const [-1, 1]) {
+        canvas.save();
+        canvas.translate(rect.center.dx, rect.bottom);
+        canvas.translate(side * heart * 0.25 * breakT, heart * 1.2 * fall);
+        canvas.rotate(side * 0.9 * breakT);
+        canvas.translate(-rect.center.dx, -rect.bottom);
+        canvas.clipRect(
+          side < 0
+              ? Rect.fromLTRB(
+                  rect.left - 4,
+                  rect.top - 4,
+                  rect.center.dx,
+                  rect.bottom + 4,
+                )
+              : Rect.fromLTRB(
+                  rect.center.dx,
+                  rect.top - 4,
+                  rect.right + 4,
+                  rect.bottom + 4,
+                ),
+        );
+        canvas.drawPath(
+          path,
+          Paint()..color = palette.danger.withValues(alpha: fade),
+        );
+        canvas.restore();
+      }
+      if (breakT < 0.15) {
+        final crack = Path()
+          ..moveTo(rect.center.dx, rect.top + heart * 0.2)
+          ..lineTo(rect.center.dx - heart * 0.1, rect.top + heart * 0.45)
+          ..lineTo(rect.center.dx + heart * 0.1, rect.top + heart * 0.65)
+          ..lineTo(rect.center.dx, rect.top + heart * 0.95);
+        canvas.drawPath(
+          crack,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(2, heart * 0.08)
+            ..color = Color.fromRGBO(27, 18, 16, alpha),
+        );
+        canvas.drawPath(path, outline);
+      }
     }
   }
 

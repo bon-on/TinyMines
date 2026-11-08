@@ -165,6 +165,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// The stage was just cleared; the next one starts after a short pause.
   bool _stageDone = false;
+
+  /// The cleared stage was a boss that restored a heart.
+  bool _healedOnClear = false;
   Timer? _advanceTimer;
 
   /// A board tap made while the tutorial check was pending:
@@ -470,7 +473,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _stageCleared() {
+    final before = _run!.hearts;
     _run = _run!.clearStage();
+    _healedOnClear = _run!.hearts > before;
     _stageDone = true;
     _advanceTimer?.cancel();
     _advanceTimer = Timer(const Duration(milliseconds: 1800), _advanceStage);
@@ -621,6 +626,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _hitIndex = blasts.isNotEmpty ? blasts.last : _findHit(origin);
       final hit = _hitIndex ?? origin;
       _fx.reveal(_wave(origin, dug));
+      if (run != null && blasts.isNotEmpty) {
+        _fx.heartLoss(hit, left: 0, lost: blasts.length);
+      }
       _fx.blast(hit, [
         for (var i = 0; i < _field.cells.length; i++)
           if (_field.cells[i].mine && i != hit && !_field.cells[i].flagged)
@@ -630,6 +638,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _fx.reveal(_wave(origin, dug));
       for (final blast in blasts) {
         _fx.blast(blast, const []);
+      }
+      if (run != null && blasts.isNotEmpty) {
+        _fx.heartLoss(blasts.last, left: _run!.hearts, lost: blasts.length);
       }
       if (_won) {
         _fx.bloom([
@@ -800,9 +811,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       if (_lost) return 'Out of hearts! The run ends at stage ${run.stage}.';
       if (_stageDone) {
         final cleared = run.stage - 1;
-        return GardenRun.isBoss(cleared)
-            ? 'Boss garden cleared! +1 heart (max ${GardenRun.maxHearts}).'
-            : 'Stage $cleared cleared!';
+        if (!GardenRun.isBoss(cleared)) return 'Stage $cleared cleared!';
+        return _healedOnClear
+            ? 'Boss garden cleared! +1 heart.'
+            : 'Boss garden cleared!';
       }
       if (_boardFeedback != null) return _boardFeedback!;
       final boss = run.config.boss;
@@ -1051,20 +1063,31 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   Widget _board(GardenPalette palette) {
     return LayoutBuilder(
       builder: (context, box) {
+        final run = _run;
+        // Garden Run keeps a large hearts row right above the board.
+        final rowHeight = run == null ? 0.0 : RunHeartsRow.height;
         final dimension = math.min(
           580.0,
-          math.min(box.maxWidth, box.maxHeight),
+          math.min(box.maxWidth, box.maxHeight - rowHeight),
         );
+        final board = GardenBoard(
+          field: _field,
+          palette: palette,
+          fx: _fx,
+          gap: _gap,
+          hitIndex: _hitIndex,
+          dimension: dimension,
+          onTap: _tapCell,
+          onFlag: _toggleFlag,
+        );
+        if (run == null) return Center(child: board);
         return Center(
-          child: GardenBoard(
-            field: _field,
-            palette: palette,
-            fx: _fx,
-            gap: _gap,
-            hitIndex: _hitIndex,
-            dimension: dimension,
-            onTap: _tapCell,
-            onFlag: _toggleFlag,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RunHeartsRow(palette: palette, hearts: run.hearts),
+              board,
+            ],
           ),
         );
       },
@@ -1200,10 +1223,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       );
     }
     return SizedBox(
-      height: 44,
+      height: 52,
       child: GardenPanel(
         palette: palette,
-        radius: 22,
+        radius: 26,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Center(child: _runHud(palette, run)),
       ),

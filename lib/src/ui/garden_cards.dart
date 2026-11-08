@@ -309,6 +309,52 @@ class GardenRunCard extends StatelessWidget {
   }
 }
 
+/// Large hearts row shown right above the board during a Garden Run.
+class RunHeartsRow extends StatelessWidget {
+  const RunHeartsRow({
+    super.key,
+    required this.palette,
+    required this.hearts,
+    this.size = 40,
+  });
+
+  /// Total height of the row.
+  static const double height = 50;
+
+  final GardenPalette palette;
+  final int hearts;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Semantics(
+        label: 'Hearts: $hearts of ${GardenRun.maxHearts}',
+        child: Row(
+          key: const ValueKey('board-hearts'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < GardenRun.maxHearts; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Icon(
+                  i < hearts
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  size: size,
+                  color: i < hearts
+                      ? palette.danger
+                      : palette.danger.withValues(alpha: 0.55),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Live status of a Garden Run: stage, hearts and the run clock. A boss stage
 /// gets a highlighted tag.
 class GardenRunHud extends StatelessWidget {
@@ -329,7 +375,7 @@ class GardenRunHud extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = TextStyle(
       fontWeight: FontWeight.w900,
-      fontSize: 15,
+      fontSize: 18,
       color: palette.textPrimary,
     );
     // Scales down instead of overflowing on the narrowest screens.
@@ -351,7 +397,7 @@ class GardenRunHud extends StatelessWidget {
                     i < hearts
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    size: 24,
+                    size: 30,
                     color: palette.danger,
                   ),
               ],
