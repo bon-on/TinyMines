@@ -61,6 +61,13 @@ fi
 
 # Debug symbol files are not needed at runtime.
 find "$OUT" -name '*.symbols' -delete
+# This is a dart2js build that only uses the CanvasKit renderer, so the
+# skwasm and wimp engines (used by --wasm builds only) are never loaded.
+if grep -q -e '"renderer":"skwasm"' -e '"compileTarget":"dart2wasm"' "$INDEX"; then
+  echo "error: unexpected wasm renderer in the build config" >&2
+  exit 1
+fi
+rm -f "$OUT"/canvaskit/skwasm* "$OUT"/canvaskit/wimp*
 rm -f "$OUT/.last_build_id"
 
 file_count=$(find "$OUT" -type f | wc -l | tr -d ' ')

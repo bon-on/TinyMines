@@ -18,7 +18,7 @@ The script runs `flutter build web --release --base-href / --no-web-resources-cd
 1. sets `<base href="./">`;
 2. inserts the SDK script before the Flutter loader (this shell uses an inline loader, not `flutter_bootstrap.js`);
 3. removes the Bon-on hub navigation bar and sets its height to 0 (the portal forbids outbound links);
-4. deletes `*.symbols`, checks at most 1500 files and 50MB, and zips the folder.
+4. deletes `*.symbols` and the unused `canvaskit/skwasm*` and `canvaskit/wimp*` engines (this is a dart2js CanvasKit build; the script fails if the build config names a wasm renderer), checks at most 1500 files and 50MB, and zips the folder.
 
 ## Tests
 
