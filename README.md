@@ -27,6 +27,12 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   in the right column. `dailyClears` and `rewardedSets` are stored in
   `garden_progress_v1` (old saves derive `dailyClears` from the daily
   history).
+- Board effects (feature-game-feel-polish): dug grass ripples out from the
+  tap and each clue pebble pops in after it, a dug mole jumps out of its hole,
+  flags spring up, a cleared field blooms. Garden Run shows a short banner for
+  every stage start, stage clear, boss garden and the first time a stage earns
+  a plot. Flag mode tints the board frame. All effects are one-shot (no
+  looping animation) and never block input.
 - Every finished run opens a summary (time, best, New best!, XP, level bar,
   unlocks, new plots) with a Next goal block (next level and theme, Garden
   Run target or the closest plot). Enter plays again, Escape shows the board.

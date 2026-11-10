@@ -5,6 +5,7 @@ status: accepted
 related_specs:
   - feature-crazygames-quality-recovery
   - feature-first-run-onboarding
+  - feature-game-feel-polish
 ---
 
 # Quality recovery

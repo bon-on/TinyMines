@@ -10,6 +10,7 @@ related_specs:
   - feature-garden-run
   - feature-next-goal-share
   - feature-garden-collection
+  - feature-game-feel-polish
 evidence_files:
   - docs/crazygames.md
   - reports/tiny-mines-crazygames-verification.md

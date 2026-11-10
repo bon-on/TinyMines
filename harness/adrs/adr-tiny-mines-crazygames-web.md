@@ -14,6 +14,7 @@ related_specs:
   - feature-first-run-onboarding
   - feature-next-goal-share
   - feature-garden-collection
+  - feature-game-feel-polish
 ---
 
 # ADR: Build flag and platform adapter for CrazyGames
