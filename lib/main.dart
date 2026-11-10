@@ -531,7 +531,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       return FxBanner(
         kind: FxBannerKind.plot,
         title: 'New plot: ${plot.label}',
-        subtitle: 'Stage $stage reached - $size, ${config.mines} moles',
+        subtitle: config.boss
+            ? 'Boss garden! $size, ${config.mines} moles - clear it to heal'
+            : 'Stage $stage reached - $size, ${config.mines} moles',
         plot: plot,
       );
     }
@@ -1009,24 +1011,33 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// Short landscape screens: Dig/Flag and the difficulty stacked beside
   /// the board, so the board keeps the full column height.
   Widget _controlColumn(GardenPalette palette) {
+    // Scales down on very short screens (browser bars, portal frames).
     return SizedBox(
       width: 112,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _gate(_modeButton(palette, false, height: 46)),
-          const SizedBox(height: 8),
-          _gate(_modeButton(palette, true, height: 46)),
-          const SizedBox(height: 14),
-          _gate(
-            DifficultyPicker(
-              palette: palette,
-              vertical: true,
-              selected: _dailyDay == null && _run == null ? _difficulty : null,
-              onChanged: _selectDifficulty,
-            ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          width: 112,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _gate(_modeButton(palette, false, height: 46)),
+              const SizedBox(height: 8),
+              _gate(_modeButton(palette, true, height: 46)),
+              const SizedBox(height: 14),
+              _gate(
+                DifficultyPicker(
+                  palette: palette,
+                  vertical: true,
+                  selected: _dailyDay == null && _run == null
+                      ? _difficulty
+                      : null,
+                  onChanged: _selectDifficulty,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -30,11 +30,7 @@ Finder get _tiles =>
     find.descendant(of: find.byType(GridView), matching: find.byType(InkWell));
 Finder get _board => find.byKey(const ValueKey('garden-board'));
 
-Future<void> _pump(
-  WidgetTester tester,
-  Size size, {
-  bool seen = false,
-}) async {
+Future<void> _pump(WidgetTester tester, Size size, {bool seen = false}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -149,6 +145,18 @@ void main() {
       expect(rect.bottom, lessThanOrEqualTo(size.height));
       expect(find.byKey(const ValueKey('dig-mode')), findsOneWidget);
       expect(find.byKey(const ValueKey('flag-mode')), findsOneWidget);
+    });
+  }
+
+  for (final size in const [Size(844, 320), Size(844, 300), Size(1000, 300)]) {
+    testWidgets('very short landscape does not overflow at $size', (
+      tester,
+    ) async {
+      await _pump(tester, size);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Hard 12x12'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
   }
 

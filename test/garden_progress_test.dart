@@ -360,7 +360,10 @@ void main() {
       expect(restored.bestRunStage, 9);
       expect(restored.totalXp, saved.totalXp);
 
-      final old = GardenProgress.fromJson({'totalXp': 50, 'wins': {'easy': 1}});
+      final old = GardenProgress.fromJson({
+        'totalXp': 50,
+        'wins': {'easy': 1},
+      });
       expect(old.runsPlayed, 0);
       expect(old.bestRunStage, 0);
       expect(old.totalXp, 50);

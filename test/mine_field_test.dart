@@ -92,8 +92,9 @@ void main() {
   });
 
   group('survivable boards (Garden Run)', () {
-    MineField field() => MineField(size: 4, mineCount: 2, survivable: true)
-      ..plantMinesAt(const [0, 15]);
+    MineField field() =>
+        MineField(size: 4, mineCount: 2, survivable: true)
+          ..plantMinesAt(const [0, 15]);
 
     test('a dug mole is flagged and exploded and play goes on', () {
       final f = field();

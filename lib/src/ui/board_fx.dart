@@ -660,7 +660,10 @@ class _FxPainter extends CustomPainter {
     if (t < 520) {
       final jump = _clamp01(t / 260);
       final settle = _clamp01((t - 260) / 260);
-      final squash = 1 + 0.25 * math.sin(math.pi * jump) * (1 - settle);
+      // Stretches while it shoots up, then squashes flat as it lands.
+      final squash = settle == 0
+          ? 1 + 0.18 * math.sin(math.pi * jump)
+          : 1 - 0.22 * math.sin(math.pi * settle);
       GardenTileArt.paintSoil(canvas, rect, palette, e.cell, hit: true);
       canvas.save();
       canvas.translate(rect.center.dx, rect.bottom);

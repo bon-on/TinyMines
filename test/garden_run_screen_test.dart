@@ -8,7 +8,9 @@ import 'package:tiny_mines/how_to_play.dart';
 import 'package:tiny_mines/main.dart';
 import 'package:tiny_mines/mine_field.dart';
 import 'package:tiny_mines/platform/game_platform.dart';
+import 'package:tiny_mines/src/audio/sound_fx.dart';
 import 'package:tiny_mines/src/game/garden_run.dart';
+import 'package:tiny_mines/src/meta/garden_plots.dart';
 import 'package:tiny_mines/src/meta/garden_progress.dart';
 import 'package:tiny_mines/src/meta/garden_progress_store.dart';
 import 'package:tiny_mines/src/ui/garden_cards.dart';
@@ -57,6 +59,7 @@ Future<void> _pump(
   Size size = const Size(800, 1400),
   GardenProgressStore? store,
   GamePlatform? platform,
+  SoundFx? soundFx,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -70,6 +73,7 @@ Future<void> _pump(
         stopwatch: FakeStopwatch(),
         now: () => DateTime(2026, 11, 2, 9),
         platform: platform ?? const NoopGamePlatform(),
+        soundFx: soundFx,
       ),
     ),
   );
@@ -473,6 +477,55 @@ void main() {
     expect(find.byKey(const ValueKey('board-banner')), findsNothing);
   });
 
+  for (final muted in [false, true]) {
+    testWidgets('a first plot plays the new-best sound (muted: $muted) and '
+        'is saved when the run is left there', (tester) async {
+      final player = _RecordingPlayer();
+      final platform = _MutePlatform(muted);
+      final store = MemoryGardenProgressStore();
+      await _pump(
+        tester,
+        store: store,
+        platform: platform,
+        soundFx: SoundFx(platform: platform, player: player),
+      );
+      await _startRun(tester);
+      await _clear(tester, _Garden().stage(1, 12), 12);
+      player.played.clear();
+      await tester.pump(const Duration(milliseconds: 1800));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(_bannerText('New plot: Sprout bed'), findsOneWidget);
+      expect(player.played, muted ? isEmpty : [Sfx.newBest.asset]);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Normal 9x9'));
+      await tester.pumpAndSettle();
+      expect(store.value.bestRunStage, 2);
+      expect(store.value.earnedPlots, contains(GardenPlot.sprouts));
+    });
+  }
+
+  testWidgets('the first boss stage with a plot still says boss garden', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _startRun(tester);
+    final garden = _Garden();
+    for (var stage = 1; stage <= 4; stage++) {
+      await _clear(tester, garden.stage(stage, 12), 12);
+      await tester.pump(const Duration(milliseconds: 1800));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(_hudStage(5), findsOneWidget);
+    expect(_bannerText('New plot: Rose arch'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('board-banner')),
+        matching: find.textContaining('Boss garden!'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a plot already earned is not announced again', (tester) async {
     final store = MemoryGardenProgressStore(
       GardenProgress.fromJson({'runsPlayed': 1, 'bestRunStage': 3}),
@@ -582,3 +635,18 @@ Finder _bannerText(String text) => find.descendant(
   of: find.byKey(const ValueKey('board-banner')),
   matching: find.text(text),
 );
+
+class _RecordingPlayer implements SoundPlayer {
+  final List<String> played = <String>[];
+  @override
+  void play(String asset, double volume) => played.add(asset);
+  @override
+  void dispose() {}
+}
+
+class _MutePlatform extends NoopGamePlatform {
+  const _MutePlatform(this.muted) : super(allowsResultRegistration: false);
+  final bool muted;
+  @override
+  bool get isAudioMuted => muted;
+}

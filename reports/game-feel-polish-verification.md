@@ -29,13 +29,23 @@ and portal bundles carried about 14 MB of unused wasm engines.
 | Check | Result |
 | --- | --- |
 | `flutter analyze` | no issues |
-| `flutter test` | 258 passed (new: `test/game_feel_test.dart`, two banner tests in `test/garden_run_screen_test.dart`) |
+| `flutter test` | 264 passed (new: `test/game_feel_test.dart`; banner, plot sound/mute/save and boss-plot tests in `test/garden_run_screen_test.dart`) |
 | `flutter test --platform chrome test/web` | 20 passed |
 | `tool/build_crazygames.sh` | passed; 39 files, 18,576 KB (was 45 files, about 30.6 MB) |
 | `tool/build_gamepix.sh` | passed; 38 files, 18,560 KB, zip 7,240 KB; 0 `crazygames` / `bon-on.github.io` strings |
 | Headless boot of both trimmed bundles | first frame in about 0.3-0.6 s on a warm local server; 14-15 requests, about 9.1 MB transferred (same as before; only `canvaskit/chromium/*` is fetched in Chrome) |
 | Board at 844x390 | about 300 px (was about 190 px); 12x12 cells at least 18 px in the widget test |
 | Board at 390x844, 12x12 | about 26 px cells, digits at 0.56 of the cell |
+
+## Independent review
+
+code-reviewer: no Critical or High findings. Fixed: the short-landscape control column overflowed below about 320 px
+height (now scales down; 844x320, 844x300 and 1000x300 tests), the first boss stage with a plot lost its boss notice
+(the plot banner now says "Boss garden!"), missing tests for the plot sound, mute and save, and the mole squash curve.
+Not changed: on short landscape screens with first-run tips the tip strip and status line swap when feedback appears,
+which changes the board by about 11 px (G4 covers narrow layouts); the inlined Flutter loader in index.html contains
+two unused URL string literals (gstatic CanvasKit CDN, a GitHub issue link). They predate this change and are never
+requested because `useLocalCanvasKit` is true.
 
 ## Not verified
 
