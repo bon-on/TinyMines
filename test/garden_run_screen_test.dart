@@ -9,6 +9,7 @@ import 'package:tiny_mines/main.dart';
 import 'package:tiny_mines/mine_field.dart';
 import 'package:tiny_mines/platform/game_platform.dart';
 import 'package:tiny_mines/src/game/garden_run.dart';
+import 'package:tiny_mines/src/meta/garden_progress.dart';
 import 'package:tiny_mines/src/meta/garden_progress_store.dart';
 import 'package:tiny_mines/src/ui/garden_cards.dart';
 
@@ -260,7 +261,8 @@ void main() {
     final ref = garden.stage(1, 12);
     await _clear(tester, ref, 12);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Stage 1 cleared!'), findsOneWidget);
+    expect(_statusText('Stage 1 cleared!'), findsOneWidget);
+    expect(_bannerText('Stage 1 cleared!'), findsOneWidget);
     expect(find.text('Next stage'), findsOneWidget);
     expect(_tiles, findsNWidgets(25));
     // Gameplay is not stopped between stages and nothing is saved yet.
@@ -360,16 +362,21 @@ void main() {
           if (stage < 5) await tester.pump(const Duration(seconds: 3));
         }
         expect(
-          find.text(
+          _statusText(
             loseHeart
                 ? 'Boss garden cleared! +1 heart.'
                 : 'Boss garden cleared!',
           ),
           findsOneWidget,
         );
+        expect(_bannerText('Boss garden cleared!'), findsOneWidget);
+        expect(
+          _bannerText(loseHeart ? '+1 heart' : 'Hearts already full'),
+          findsOneWidget,
+        );
         expect(
           find.textContaining('+1 heart'),
-          loseHeart ? findsOneWidget : findsNothing,
+          loseHeart ? findsNWidgets(2) : findsNothing,
         );
         expect(_fullHearts, findsNWidgets(3));
         expect(store.saveCount, 0);
@@ -426,6 +433,59 @@ void main() {
     expect(find.text('Heart lost! 0 left'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.text('Run over!'), findsOneWidget);
+  });
+
+  testWidgets('banners announce each stage, its clear and a first plot', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _startRun(tester);
+    await tester.pump(const Duration(milliseconds: 1600));
+    // pumpAndSettle in _startRun already ran the intro; restart to see it.
+    await tester.tap(find.byTooltip('Restart run'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_bannerText('Stage 1'), findsOneWidget);
+    expect(_bannerText('5x5 garden, 3 moles'), findsOneWidget);
+    // The banner never blocks the board.
+    expect(
+      find.ancestor(
+        of: find.byKey(const ValueKey('board-banner')),
+        matching: find.byType(IgnorePointer),
+      ),
+      findsWidgets,
+    );
+    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('board-banner')), findsNothing);
+
+    final garden = _Garden();
+    await _clear(tester, garden.stage(1, 12), 12);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(_bannerText('Stage 1 cleared!'), findsOneWidget);
+    expect(_bannerText('Next: stage 2'), findsOneWidget);
+
+    // Reaching stage 2 earns the Sprout bed plot for the first time.
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_bannerText('New plot: Sprout bed'), findsOneWidget);
+    expect(_hudStage(2), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('board-banner')), findsNothing);
+  });
+
+  testWidgets('a plot already earned is not announced again', (tester) async {
+    final store = MemoryGardenProgressStore(
+      GardenProgress.fromJson({'runsPlayed': 1, 'bestRunStage': 3}),
+    );
+    await _pump(tester, store: store);
+    await _startRun(tester);
+    final garden = _Garden();
+    await _clear(tester, garden.stage(1, 12), 12);
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_hudStage(2), findsOneWidget);
+    expect(_bannerText('Stage 2'), findsOneWidget);
+    expect(find.textContaining('New plot'), findsNothing);
   });
 
   group('layout', () {
@@ -512,3 +572,13 @@ void main() {
     }
   });
 }
+
+Finder _statusText(String text) => find.descendant(
+  of: find.byKey(const ValueKey('status-line')),
+  matching: find.text(text),
+);
+
+Finder _bannerText(String text) => find.descendant(
+  of: find.byKey(const ValueKey('board-banner')),
+  matching: find.text(text),
+);

@@ -221,14 +221,34 @@ class GardenTileArt {
     }
   }
 
-  /// A smooth pebble with the number [n] on it.
-  static void paintPebble(Canvas canvas, Rect rect, GardenPalette p, int n) {
+  /// How large the clue is relative to the cell. Small cells (12x12 on a
+  /// phone) get a bigger share so the digit stays readable.
+  static double numberShare(double cell) =>
+      cell < 28 ? 0.56 : (cell < 40 ? 0.5 : 0.44);
+
+  /// A smooth pebble with the number [n] on it. [scale] grows it from its
+  /// centre (the reveal effect pops it in).
+  static void paintPebble(
+    Canvas canvas,
+    Rect rect,
+    GardenPalette p,
+    int n, {
+    double scale = 1,
+  }) {
+    if (scale <= 0) return;
     final s = rect.shortestSide;
     final c = rect.center + Offset(0, s * 0.03);
+    final share = numberShare(s);
+    if (scale != 1) {
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.scale(scale);
+      canvas.translate(-c.dx, -c.dy);
+    }
     final pebble = Rect.fromCenter(
       center: c,
-      width: s * 0.66,
-      height: s * 0.56,
+      width: s * (share + 0.22),
+      height: s * (share + 0.12),
     );
     canvas.drawOval(
       pebble.shift(Offset(0, s * 0.045)),
@@ -244,8 +264,9 @@ class GardenTileArt {
       ),
       Paint()..color = const Color(0x66FFFFFF),
     );
-    final text = _label('$n', p.pebbleInk(n), s * 0.44);
+    final text = _label('$n', p.pebbleInk(n), s * share);
     text.paint(canvas, c - Offset(text.width / 2, text.height / 2));
+    if (scale != 1) canvas.restore();
   }
 
   /// A little garden flag on a mound. [scale] grows it from its base.

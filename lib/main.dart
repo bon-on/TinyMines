@@ -14,6 +14,7 @@ import 'src/audio/sound_fx.dart';
 import 'src/game/difficulty.dart';
 import 'src/game/garden_run.dart';
 import 'src/meta/daily_challenge.dart';
+import 'src/meta/garden_plots.dart';
 import 'src/meta/garden_progress.dart';
 import 'src/meta/garden_progress_store.dart';
 import 'src/meta/garden_theme.dart';
@@ -469,12 +470,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _dailyDay = DailyChallenge.dayKey(day);
     _dailyPractice = practice;
     _hints = DailyChallenge.difficulty.hints;
-    _fx.reveal(
-      _wave(start, [
-        for (var i = 0; i < field.cells.length; i++)
-          if (field.cells[i].revealed) i,
-      ]),
-    );
+    final opened = [
+      for (var i = 0; i < field.cells.length; i++)
+        if (field.cells[i].revealed) i,
+    ];
+    _fx.reveal(_wave(start, opened), numbers: _numbers(opened));
     setState(() {});
     _syncGameplay();
   }
@@ -494,7 +494,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _loadStage() {
-    final config = _run!.config;
+    final run = _run!;
+    final config = run.config;
     _resetRunState();
     _field = MineField(
       size: config.size,
@@ -503,8 +504,49 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       requireLogicalSolution: config.fairStart,
       survivable: true,
     );
+    _fx.banner(_stageBanner(run.stage));
+    if (_stageBannerPlot(run.stage) != null) _sound.play(Sfx.newBest);
     setState(() {});
     _syncGameplay();
+  }
+
+  /// The Run Path plot that reaching [stage] earns for the first time.
+  /// Reaching a stage is what counts (feature-garden-collection), so it is
+  /// announced as the stage starts; the run's end saves it.
+  GardenPlot? _stageBannerPlot(int stage) {
+    if (!_progressLoaded) return null;
+    for (final plot in PlotSet.runPath.plots) {
+      if (plot.requirement == stage && _progress.bestRunStage < stage) {
+        return plot;
+      }
+    }
+    return null;
+  }
+
+  FxBanner _stageBanner(int stage) {
+    final config = GardenRun.stage(stage);
+    final plot = _stageBannerPlot(stage);
+    final size = '${config.size}x${config.size}';
+    if (plot != null) {
+      return FxBanner(
+        kind: FxBannerKind.plot,
+        title: 'New plot: ${plot.label}',
+        subtitle: 'Stage $stage reached - $size, ${config.mines} moles',
+        plot: plot,
+      );
+    }
+    if (config.boss) {
+      return FxBanner(
+        kind: FxBannerKind.boss,
+        title: 'Boss garden!',
+        subtitle: '$size, ${config.mines} moles - clear it to heal',
+      );
+    }
+    return FxBanner(
+      kind: FxBannerKind.stage,
+      title: 'Stage $stage',
+      subtitle: '$size garden, ${config.mines} moles',
+    );
   }
 
   void _advanceStage() {
@@ -519,6 +561,20 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _healedOnClear = _run!.hearts > before;
     if (_healedOnClear) _runHeals++;
     _stageDone = true;
+    final cleared = _run!.stage - 1;
+    _fx.banner(
+      GardenRun.isBoss(cleared)
+          ? FxBanner(
+              kind: FxBannerKind.bossCleared,
+              title: 'Boss garden cleared!',
+              subtitle: _healedOnClear ? '+1 heart' : 'Hearts already full',
+            )
+          : FxBanner(
+              kind: FxBannerKind.cleared,
+              title: 'Stage $cleared cleared!',
+              subtitle: 'Next: stage ${_run!.stage}',
+            ),
+    );
     _advanceTimer?.cancel();
     _advanceTimer = Timer(const Duration(milliseconds: 1800), _advanceStage);
   }
@@ -589,6 +645,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     final size = _field.size;
     return math.max((a ~/ size - b ~/ size).abs(), (a % size - b % size).abs());
   }
+
+  /// Clues of the dug [cells] that show a number, for the pop-in effect.
+  Map<int, int> _numbers(Iterable<int> cells) => {
+    for (final c in cells)
+      if (!_field.cells[c].mine && _field.cells[c].nearby > 0)
+        c: _field.cells[c].nearby,
+  };
 
   /// Cells with delays rippling out from [origin].
   List<TimedCell> _wave(int origin, Iterable<int> cells, {int stepMs = 34}) {
@@ -669,7 +732,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (_lost) {
       _hitIndex = blasts.isNotEmpty ? blasts.last : _findHit(origin);
       final hit = _hitIndex ?? origin;
-      _fx.reveal(_wave(origin, dug));
+      _fx.reveal(_wave(origin, dug), numbers: _numbers(dug));
       if (run != null && blasts.isNotEmpty) {
         _fx.heartLoss(hit, left: 0, lost: run.hearts, max: GardenRun.maxHearts);
       }
@@ -679,7 +742,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             (cell: i, delayMs: 260 + math.min(1100, _distance(hit, i) * 90)),
       ]);
     } else {
-      _fx.reveal(_wave(origin, dug));
+      _fx.reveal(_wave(origin, dug), numbers: _numbers(dug));
       for (final blast in blasts) {
         _fx.blast(blast, const []);
       }
@@ -928,6 +991,46 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     setState(() => _flagMode = flag);
   }
 
+  Widget _modeButton(GardenPalette palette, bool flag, {double height = 40}) {
+    return Semantics(
+      key: ValueKey(flag ? 'flag-mode' : 'dig-mode'),
+      selected: _flagMode == flag,
+      child: GardenButton(
+        palette: palette,
+        label: flag ? 'Flag' : 'Dig',
+        icon: flag ? Icons.flag_rounded : Icons.touch_app_rounded,
+        primary: _flagMode == flag,
+        height: height,
+        onPressed: _over ? null : () => _setFlagMode(flag),
+      ),
+    );
+  }
+
+  /// Short landscape screens: Dig/Flag and the difficulty stacked beside
+  /// the board, so the board keeps the full column height.
+  Widget _controlColumn(GardenPalette palette) {
+    return SizedBox(
+      width: 112,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _gate(_modeButton(palette, false, height: 46)),
+          const SizedBox(height: 8),
+          _gate(_modeButton(palette, true, height: 46)),
+          const SizedBox(height: 14),
+          _gate(
+            DifficultyPicker(
+              palette: palette,
+              vertical: true,
+              selected: _dailyDay == null && _run == null ? _difficulty : null,
+              onChanged: _selectDifficulty,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _modeControls(GardenPalette palette) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
@@ -935,20 +1038,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         children: [
           for (final flag in [false, true]) ...[
             if (flag) const SizedBox(width: 8),
-            Expanded(
-              child: Semantics(
-                key: ValueKey(flag ? 'flag-mode' : 'dig-mode'),
-                selected: _flagMode == flag,
-                child: GardenButton(
-                  palette: palette,
-                  label: flag ? 'Flag' : 'Dig',
-                  icon: flag ? Icons.flag_rounded : Icons.touch_app_rounded,
-                  primary: _flagMode == flag,
-                  height: 40,
-                  onPressed: _over ? null : () => _setFlagMode(flag),
-                ),
-              ),
-            ),
+            Expanded(child: _modeButton(palette, flag)),
           ],
         ],
       ),
@@ -1152,6 +1242,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           fx: _fx,
           gap: _gap,
           hitIndex: _hitIndex,
+          flagMode: _flagMode && !_over,
           dimension: dimension,
           onTap: _tapCell,
           onFlag: _toggleFlag,
@@ -1171,10 +1262,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   Widget _statusArea(GardenPalette palette) {
+    const fontSize = 13.0;
+    const lineHeight = 1.25;
+    // Always two lines tall, so a longer message never resizes the board.
+    final twoLines =
+        MediaQuery.textScalerOf(context).scale(fontSize) * lineHeight * 2 + 12;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
+          key: const ValueKey('status-line'),
+          constraints: BoxConstraints(minHeight: twoLines),
+          alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: palette.panel,
@@ -1187,7 +1286,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: _lost ? palette.danger : palette.textPrimary,
-              fontSize: 13,
+              fontSize: fontSize,
+              height: lineHeight,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1415,8 +1515,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         child: FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.topCenter,
+          // Laid out at least 210 wide (the cards' design width), then
+          // scaled into [width] on short landscape screens.
           child: SizedBox(
-            width: width,
+            width: math.max(width, 210),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1429,8 +1531,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   Widget _wideLayout(GardenPalette palette, BoxConstraints box) {
-    final side = (box.maxWidth * 0.235).clamp(210.0, 300.0);
     final shortWide = box.maxHeight < 520;
+    final side = shortWide
+        ? (box.maxWidth * 0.2).clamp(160.0, 260.0)
+        : (box.maxWidth * 0.235).clamp(210.0, 300.0);
     final stats = _stats;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
@@ -1505,26 +1609,38 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           Expanded(
             child: Column(
               children: [
-                _gate(
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: DifficultyPicker(
-                      palette: palette,
-                      selected: _dailyDay == null && _run == null
-                          ? _difficulty
-                          : null,
-                      onChanged: _selectDifficulty,
+                if (!shortWide) ...[
+                  _gate(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: DifficultyPicker(
+                        palette: palette,
+                        selected: _dailyDay == null && _run == null
+                            ? _difficulty
+                            : null,
+                        onChanged: _selectDifficulty,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _gate(_modeControls(palette)),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                  _gate(_modeControls(palette)),
+                  const SizedBox(height: 8),
+                ],
                 if (_onboarding && !shortWide) ...[
                   _tipStrip(palette, compact: box.maxHeight < 600),
                   const SizedBox(height: 8),
                 ],
-                Expanded(child: _board(palette)),
+                Expanded(
+                  child: shortWide
+                      ? Row(
+                          children: [
+                            _controlColumn(palette),
+                            const SizedBox(width: 10),
+                            Expanded(child: _board(palette)),
+                          ],
+                        )
+                      : _board(palette),
+                ),
                 const SizedBox(height: 8),
                 // Short landscape screens: the tips take the status line's
                 // place (feedback still wins) so the board keeps its size.

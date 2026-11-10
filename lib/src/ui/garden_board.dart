@@ -38,6 +38,7 @@ class GardenBoard extends StatelessWidget {
     required this.onTap,
     required this.onFlag,
     required this.dimension,
+    this.flagMode = false,
   });
 
   final MineField field;
@@ -51,6 +52,10 @@ class GardenBoard extends StatelessWidget {
   /// Outer size of the framed board.
   final double dimension;
 
+  /// Taps plant flags: the frame turns flag-coloured so the mode is visible
+  /// right where the player taps.
+  final bool flagMode;
+
   /// Frame thickness for a board of [dimension].
   static double frameFor(double dimension) => (dimension * 0.028).clamp(6, 14);
 
@@ -59,6 +64,7 @@ class GardenBoard extends StatelessWidget {
     final frame = frameFor(dimension);
     final gameOver = field.lost || field.won;
     return Container(
+      key: const ValueKey('garden-board'),
       width: dimension,
       height: dimension,
       padding: EdgeInsets.all(frame),
@@ -73,15 +79,23 @@ class GardenBoard extends StatelessWidget {
           ],
         ),
         border: Border.all(
-          color: Color.lerp(palette.boardFrame, Colors.black, 0.25)!,
-          width: 2,
+          color: flagMode
+              ? palette.flagCloth
+              : Color.lerp(palette.boardFrame, Colors.black, 0.25)!,
+          width: flagMode ? 3 : 2,
         ),
-        boxShadow: const [
-          BoxShadow(
+        boxShadow: [
+          const BoxShadow(
             color: Color(0x40000000),
             blurRadius: 18,
             offset: Offset(0, 8),
           ),
+          if (flagMode)
+            BoxShadow(
+              color: palette.flagCloth.withValues(alpha: 0.55),
+              blurRadius: 14,
+              spreadRadius: 2,
+            ),
         ],
       ),
       child: DecoratedBox(

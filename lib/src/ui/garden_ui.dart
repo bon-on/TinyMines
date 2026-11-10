@@ -359,35 +359,38 @@ class DifficultyPicker extends StatelessWidget {
     required this.palette,
     required this.selected,
     required this.onChanged,
+    this.vertical = false,
   });
 
   final GardenPalette palette;
   final Difficulty? selected;
   final ValueChanged<Difficulty> onChanged;
 
+  /// Stacked segments (short landscape screens, beside the board).
+  final bool vertical;
+
   @override
   Widget build(BuildContext context) {
+    final segments = [
+      for (final option in Difficulty.values)
+        _Segment(
+          palette: palette,
+          label: option.title,
+          selected: option == selected,
+          onTap: () => onChanged(option),
+        ),
+    ];
     return Container(
-      height: 42,
+      height: vertical ? 3 * 34 + 10 : 42,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: palette.panel,
         borderRadius: BorderRadius.circular(21),
         border: Border.all(color: palette.panelBorder, width: 2),
       ),
-      child: Row(
-        children: [
-          for (final option in Difficulty.values)
-            Expanded(
-              child: _Segment(
-                palette: palette,
-                label: option.title,
-                selected: option == selected,
-                onTap: () => onChanged(option),
-              ),
-            ),
-        ],
-      ),
+      child: vertical
+          ? Column(children: [for (final s in segments) Expanded(child: s)])
+          : Row(children: [for (final s in segments) Expanded(child: s)]),
     );
   }
 }

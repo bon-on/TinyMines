@@ -35,7 +35,11 @@
   <style>
     :root { --games-nav-height: calc(48px + env(safe-area-inset-top)); }
     html, body { height: 100%; margin: 0; }
-    body { overflow: hidden; background: #101214; }
+    /* Sky over grass: the first frame already reads as the garden. */
+    body {
+      overflow: hidden;
+      background: linear-gradient(#bfe6f7 0%, #e3f4e0 62%, #8fcf6a 62%, #5fae4a 100%) fixed #8fcf6a;
+    }
     #game-host {
       position: fixed;
       inset: var(--games-nav-height) 0 0 0;
@@ -70,19 +74,25 @@
       justify-content: center;
       gap: 20px;
       background: inherit;
-      color: #e8ecef;
-      font: 600 22px/1.2 system-ui, sans-serif;
+      color: #3b2a1a;
+      font: 900 30px/1.2 system-ui, sans-serif;
+      text-shadow: 0 2px 0 rgba(255, 255, 255, .7);
       transition: opacity .25s;
       pointer-events: none;
     }
     #game-loader.done { opacity: 0; }
     #game-loader .spinner {
-      width: 36px;
-      height: 36px;
-      border: 4px solid rgba(255, 255, 255, .2);
-      border-top-color: #c9f36a;
+      width: 40px;
+      height: 40px;
+      border: 5px solid rgba(107, 74, 43, .25);
+      border-top-color: #4caf50;
       border-radius: 50%;
       animation: game-loader-spin .9s linear infinite;
+    }
+    #game-loader .tagline {
+      font: 700 15px/1.2 system-ui, sans-serif;
+      color: #6b4a2b;
+      text-shadow: none;
     }
     @keyframes game-loader-spin { to { transform: rotate(360deg); } }
     body {
@@ -98,7 +108,7 @@
     <a class="games-home-link" href="https://bon-on.github.io/" aria-label="게임 선택 화면으로 돌아가기">← 게임 목록</a>
   </nav>
   <div id="game-host"></div>
-  <div id="game-loader" role="status" aria-live="polite"><div class="spinner"></div><div>Tiny Mines</div></div>
+  <div id="game-loader" role="status" aria-live="polite"><div class="spinner"></div><div>Tiny Mines</div><div class="tagline">A cozy garden dig</div></div>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {

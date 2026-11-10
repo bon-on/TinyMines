@@ -104,15 +104,25 @@ class OnboardingStrip extends StatelessWidget {
                           color: palette.textPrimary,
                         ),
                       ),
-                      Text(
-                        body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: bodySize,
-                          height: 1.2,
-                          fontWeight: FontWeight.w700,
-                          color: palette.textSecondary,
+                      // Two lines tall for every tip, so the board below
+                      // keeps its size when the tip changes.
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight:
+                              MediaQuery.textScalerOf(context).scale(bodySize) *
+                              1.2 *
+                              2,
+                        ),
+                        child: Text(
+                          body,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: bodySize,
+                            height: 1.2,
+                            fontWeight: FontWeight.w700,
+                            color: palette.textSecondary,
+                          ),
                         ),
                       ),
                     ],

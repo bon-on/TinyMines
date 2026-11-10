@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 
 import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
+import '../art/plot_art.dart';
+import '../meta/garden_plots.dart';
 
 /// A board cell paired with the delay before its effect starts.
 typedef TimedCell = ({int cell, int delayMs});
@@ -21,13 +23,22 @@ abstract class _FxEvent {
 }
 
 /// Grass tufts popping off newly dug cells, rippling out from the tap.
+/// Numbered cells also pop their pebble in once the tuft is gone.
 class _RevealEvent extends _FxEvent {
-  _RevealEvent(this.cells);
+  _RevealEvent(this.cells, this.numbers);
   final List<TimedCell> cells;
+
+  /// Clue (1..8) per dug cell that shows one.
+  final Map<int, int> numbers;
   static const int popMs = 280;
+
+  /// The pebble starts growing this long after the cell's delay.
+  static const int numberLeadMs = 90;
+  static const int numberMs = 260;
   @override
   int get lengthMs =>
-      cells.fold<int>(0, (m, c) => math.max(m, c.delayMs)) + popMs;
+      cells.fold<int>(0, (m, c) => math.max(m, c.delayMs)) +
+      (numbers.isEmpty ? popMs : math.max(popMs, numberLeadMs + numberMs));
 }
 
 class _FlagEvent extends _FxEvent {
@@ -87,6 +98,35 @@ class _HeartLossEvent extends _FxEvent {
   int get lengthMs => totalMs;
 }
 
+/// What a Garden Run banner announces.
+enum FxBannerKind { stage, boss, cleared, bossCleared, plot }
+
+/// A short ribbon over the top of the board (Garden Run stage start, stage
+/// clear, boss and plot moments). Text only; it never blocks input.
+class FxBanner {
+  const FxBanner({
+    required this.kind,
+    required this.title,
+    this.subtitle,
+    this.plot,
+  });
+
+  final FxBannerKind kind;
+  final String title;
+  final String? subtitle;
+
+  /// The plot earned at this moment, drawn next to the text.
+  final GardenPlot? plot;
+}
+
+class _BannerEvent extends _FxEvent {
+  _BannerEvent(this.banner);
+  final FxBanner banner;
+  static const int totalMs = 1500;
+  @override
+  int get lengthMs => totalMs;
+}
+
 /// Queue of board effects. Rules are applied by the screen right away; the
 /// effects only trail behind on a separate layer, so they never block input.
 ///
@@ -99,9 +139,30 @@ class BoardFx extends ChangeNotifier {
 
   bool get isActive => _events.isNotEmpty;
 
-  void reveal(List<TimedCell> cells) {
+  /// Dug [cells] in ripple order; [numbers] maps a dug cell to its clue so
+  /// the clue pebble pops in after the grass.
+  void reveal(List<TimedCell> cells, {Map<int, int> numbers = const {}}) {
     if (cells.isEmpty) return;
-    _add(_RevealEvent(cells));
+    _add(_RevealEvent(cells, numbers));
+  }
+
+  /// Shows [banner] over the board, replacing one still showing.
+  void banner(FxBanner banner) {
+    _events.removeWhere((e) => e is _BannerEvent);
+    _add(_BannerEvent(banner));
+  }
+
+  /// The banner still showing, if any, and its age.
+  ({FxBanner banner, int ageMs})? get bannerState {
+    for (final event in _events) {
+      if (event is _BannerEvent) {
+        return (
+          banner: event.banner,
+          ageMs: (_clock - event.start).inMilliseconds,
+        );
+      }
+    }
+    return null;
   }
 
   void flag(int cell, {required bool planted}) {
@@ -257,6 +318,12 @@ class _BoardFxLayerState extends State<BoardFxLayer>
               builder: (context, _) => _heartLossLabel(),
             ),
           ),
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _frame,
+              builder: (context, _) => _bannerLabel(),
+            ),
+          ),
         ],
       ),
       builder: (context, child) =>
@@ -293,6 +360,127 @@ class _BoardFxLayerState extends State<BoardFxLayer>
           ),
         ),
       ),
+    );
+  }
+
+  /// The Garden Run ribbon: drops in with a small overshoot, holds, then
+  /// fades. Kept in the upper part of the board so the centre stays visible.
+  Widget _bannerLabel() {
+    final state = widget.fx.bannerState;
+    if (state == null) return const SizedBox.shrink();
+    final banner = state.banner;
+    final t = state.ageMs;
+    final palette = widget.palette;
+    final enter = _clamp01(t / 320);
+    final fade = _clamp01((_BannerEvent.totalMs - t) / 300);
+    final scale = 0.6 + 0.4 * _easeOutBack(enter);
+    final (Color fill, Color ink) = switch (banner.kind) {
+      FxBannerKind.boss => (palette.danger, const Color(0xFFFFFFFF)),
+      FxBannerKind.bossCleared => (palette.danger, const Color(0xFFFFFFFF)),
+      FxBannerKind.plot => (palette.flowerCenter, const Color(0xFF3B2A05)),
+      FxBannerKind.cleared => (palette.accent, palette.onAccent),
+      FxBannerKind.stage => (const Color(0xE61B1210), const Color(0xFFFFFFFF)),
+    };
+    return LayoutBuilder(
+      builder: (context, box) {
+        final width = box.maxWidth;
+        final titleSize = (width * 0.075).clamp(15.0, 30.0);
+        final subSize = (titleSize * 0.52).clamp(11.0, 16.0);
+        final plotSize = titleSize * 2.1;
+        return Align(
+          alignment: const Alignment(0, -0.42),
+          child: Opacity(
+            opacity: fade * enter,
+            child: Transform.translate(
+              offset: Offset(0, -titleSize * (1 - enter)),
+              child: Transform.scale(
+                scale: scale,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width * 0.92),
+                  child: DecoratedBox(
+                    key: const ValueKey('board-banner'),
+                    decoration: BoxDecoration(
+                      color: fill,
+                      borderRadius: BorderRadius.circular(titleSize * 0.8),
+                      border: Border.all(
+                        color: const Color(0xCCFFFFFF),
+                        width: 2,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x55000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: titleSize * 0.7,
+                        vertical: titleSize * 0.3,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (banner.plot != null) ...[
+                            SizedBox.square(
+                              dimension: plotSize,
+                              child: Transform.scale(
+                                scale: _easeOutBack(_clamp01((t - 160) / 420)),
+                                child: CustomPaint(
+                                  painter: PlotPainter(
+                                    plot: banner.plot!,
+                                    palette: palette,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: titleSize * 0.4),
+                          ],
+                          Flexible(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  banner.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: ink,
+                                    fontSize: titleSize,
+                                    height: 1.1,
+                                    fontWeight: FontWeight.w900,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                                if (banner.subtitle != null)
+                                  Text(
+                                    banner.subtitle!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: ink.withValues(alpha: 0.9),
+                                      fontSize: subSize,
+                                      height: 1.2,
+                                      fontWeight: FontWeight.w800,
+                                      decoration: TextDecoration.none,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -363,6 +551,8 @@ class _FxPainter extends CustomPainter {
           _paintSparkle(canvas, box, event, t);
         case _HeartLossEvent():
           _paintHeartLoss(canvas, box, event, t);
+        case _BannerEvent():
+          break;
       }
     }
   }
@@ -376,6 +566,25 @@ class _FxPainter extends CustomPainter {
       if (local < 0) {
         GardenTileArt.paintCovered(canvas, rect, palette, c.cell);
         continue;
+      }
+      final number = e.numbers[c.cell];
+      if (number != null) {
+        // Soil with the clue pebble growing in under the leaving tuft.
+        final grow = _clamp01(
+          (local - _RevealEvent.numberLeadMs) / _RevealEvent.numberMs,
+        );
+        if (grow < 1) {
+          GardenTileArt.paintSoil(canvas, rect, palette, c.cell);
+          if (grow > 0) {
+            GardenTileArt.paintPebble(
+              canvas,
+              rect,
+              palette,
+              number,
+              scale: _easeOutBack(grow),
+            );
+          }
+        }
       }
       final p = _clamp01(local / _RevealEvent.popMs);
       if (p >= 1) continue;
@@ -447,6 +656,25 @@ class _FxPainter extends CustomPainter {
   void _paintBlast(Canvas canvas, Size box, _BlastEvent e, int t) {
     final rect = _cellRect(box, e.cell);
     final s = rect.width;
+    // The startled mole jumps out of its hole and squashes back.
+    if (t < 520) {
+      final jump = _clamp01(t / 260);
+      final settle = _clamp01((t - 260) / 260);
+      final squash = 1 + 0.25 * math.sin(math.pi * jump) * (1 - settle);
+      GardenTileArt.paintSoil(canvas, rect, palette, e.cell, hit: true);
+      canvas.save();
+      canvas.translate(rect.center.dx, rect.bottom);
+      canvas.scale(1 / math.sqrt(squash), squash);
+      canvas.translate(-rect.center.dx, -rect.bottom);
+      GardenTileArt.paintMole(
+        canvas,
+        rect,
+        palette,
+        hit: true,
+        rise: _easeOutBack(jump).clamp(0.0, 1.0),
+      );
+      canvas.restore();
+    }
     // Expanding ring and flash.
     final ringP = _clamp01(t / 420);
     if (ringP < 1) {
