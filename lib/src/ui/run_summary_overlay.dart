@@ -253,7 +253,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                                     // Portal preview frames (620x349,
                                     // 560x315): no art, smaller tiles, so
                                     // the XP row shows above the actions.
-                                    final tight = box.maxHeight < 300;
+                                    final tight = box.maxHeight < 320;
                                     return Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [

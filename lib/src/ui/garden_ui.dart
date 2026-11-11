@@ -370,6 +370,7 @@ class DifficultyPicker extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.vertical = false,
+    this.shortLabels = false,
   });
 
   final GardenPalette palette;
@@ -379,13 +380,18 @@ class DifficultyPicker extends StatelessWidget {
   /// Stacked segments (short landscape screens, beside the board).
   final bool vertical;
 
+  /// Shows "Hard" instead of "Hard 12x12" (narrow rows); the full title stays
+  /// the semantics label and tooltip.
+  final bool shortLabels;
+
   @override
   Widget build(BuildContext context) {
     final segments = [
       for (final option in Difficulty.values)
         _Segment(
           palette: palette,
-          label: option.title,
+          label: shortLabels ? option.label : option.title,
+          semanticsLabel: shortLabels ? option.title : null,
           selected: option == selected,
           onTap: () => onChanged(option),
         ),
@@ -411,6 +417,7 @@ class _Segment extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.semanticsLabel,
   });
 
   final GardenPalette palette;
@@ -418,9 +425,13 @@ class _Segment extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Full name for assistive tech and the tooltip when [label] is shortened.
+  final String? semanticsLabel;
+
   @override
   Widget build(BuildContext context) {
-    return Semantics(
+    final full = semanticsLabel;
+    final segment = Semantics(
       button: true,
       selected: selected,
       child: Material(
@@ -436,6 +447,7 @@ class _Segment extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 child: Text(
                   label,
+                  semanticsLabel: full,
                   maxLines: 1,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
@@ -449,6 +461,9 @@ class _Segment extends StatelessWidget {
         ),
       ),
     );
+    return full == null
+        ? segment
+        : Tooltip(message: full, excludeFromSemantics: true, child: segment);
   }
 }
 

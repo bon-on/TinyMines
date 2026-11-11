@@ -48,11 +48,14 @@ Layout selection (`screenLayoutFor` in `lib/main.dart`)
   are laid out at their width and only scale down (FittedBox) when taller
   than the window.
 - `stacked` for portrait and square windows. Windows under 700 px tall
-  (`shortStackedHeight`) fold the controls: one row with the level badge, the
-  Garden Run entry (or run status), Daily and Garden as icon buttons; one row
-  with Dig and Flag as icon toggles (tooltips "Dig"/"Flag", semantics keys
-  `dig-mode`/`flag-mode` with the selected state) beside the difficulty
-  picker; no XP footer; the compact tip strip takes the status line's place
+  (`shortStackedHeight`) fold the controls: one row with the level badge and
+  the Garden Run entry (during a run: the stage/BOSS and run clock status
+  instead of both, the hearts show above the board), Daily and Garden as
+  icon buttons; one row with Dig and Flag as icon toggles (tooltips
+  "Dig"/"Flag", semantics keys `dig-mode`/`flag-mode` with the selected
+  state) beside the difficulty picker, whose segments show only the name
+  ("Hard") with the full title ("Hard 12x12") as tooltip and semantics
+  label; no XP footer; the compact tip strip takes the status line's place
   while it is shown (feedback and the end of a board still show the status).
   Taller stacked windows (390x844) keep the existing arrangement.
 - Icon buttons smaller than 44 px use their visual size as the tap target
@@ -67,7 +70,7 @@ Board fit
   supported size.
 
 Result card
-- On card boxes under 300 px tall (620x349, 600x338, 560x315) the card hides
+- On card boxes under 320 px tall (620x349, 600x338, 560x315) the card hides
   the tile art and uses regular (not large) stat tiles; on windows under
   380 px tall it uses slimmer margins, so the XP row shows above the pinned
   actions.
@@ -92,12 +95,13 @@ unchanged.
   250 at 844x390, 280 at 932x430, 260 at 360x640, 320 at 390x844, 200 at
   320x568, 420 at 1280x720, 460 at 1366x768); Hard 12x12 cells and the
   Garden Run 12x12 cell size are at least 14 px; a tap on the first tile
-  digs.
+  digs; the difficulty labels render at least 11 px tall.
 - A3: A real Garden Run played to stage 10 (12x12 boss) at 620x349, 560x315
-  and 320x568: 144 tiles, cells >= 14 px, BOSS tag visible, no overlap.
+  and 320x568: 144 tiles, cells >= 14 px, the BOSS label at least 10 px and
+  "Stage 10" at least 14 px tall, no overlap.
 - A4: At 620x349, 560x315 and 320x568 Dig/Flag toggles work (flag mode is
   selected in semantics and a tap flags without digging), the Garden overlay
-  and How to play open without errors, and after a lost board the result
+  and How to play open (asserted by type) without errors, and after a lost board the result
   card shows "+N XP" above "New Field", which is on screen and closes the
   card.
 - A5: Existing tests keep passing (390x844, 844x390, 1280x720, 1366x768 and

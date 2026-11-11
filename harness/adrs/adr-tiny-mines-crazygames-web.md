@@ -4,6 +4,7 @@ title: Use a build flag and platform adapter for the CrazyGames build
 status: accepted
 related_specs:
   - feature-tiny-mines-crazygames
+  - feature-short-viewport-layout
   - feature-tiny-mines-gamepix
   - feature-sound-effects
   - feature-retention-polish

@@ -1423,7 +1423,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                       const SizedBox(width: 6),
                       _modeIcon(palette, true),
                       const SizedBox(width: 8),
-                      Expanded(child: _difficultyPicker(palette)),
+                      // Names only ("Hard"), so the labels stay readable
+                      // beside the toggles; the size is the semantics label.
+                      Expanded(
+                        child: _difficultyPicker(palette, shortLabels: true),
+                      ),
                     ],
                   ),
                 ),
@@ -1455,13 +1459,17 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
-  Widget _difficultyPicker(GardenPalette palette, {bool vertical = false}) =>
-      DifficultyPicker(
-        palette: palette,
-        vertical: vertical,
-        selected: _dailyDay == null && _run == null ? _difficulty : null,
-        onChanged: _selectDifficulty,
-      );
+  Widget _difficultyPicker(
+    GardenPalette palette, {
+    bool vertical = false,
+    bool shortLabels = false,
+  }) => DifficultyPicker(
+    palette: palette,
+    vertical: vertical,
+    shortLabels: shortLabels,
+    selected: _dailyDay == null && _run == null ? _difficulty : null,
+    onChanged: _selectDifficulty,
+  );
 
   /// Icon-only Dig/Flag toggle for short windows; the label stays as the
   /// tooltip and semantics label.
@@ -1503,7 +1511,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     palette: palette,
                     radius: 25,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Center(child: _runHud(palette, run)),
+                    child: Center(child: _compactRunHud(palette, run)),
                   )
                 : Center(child: _runEntry(palette, height: 44)),
           ),
@@ -1716,8 +1724,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
-  /// Garden Run status for the slim compact column: stage (and boss tag)
-  /// over the run clock. The hearts show in the large row above the board.
+  /// Garden Run status for slim spaces (compact column, short stacked meta
+  /// row): stage (and boss tag) over the run clock. The hearts show in the
+  /// large row above the board.
   Widget _compactRunHud(GardenPalette palette, GardenRunState run) {
     final stage = GardenRun.stage(_stageDone ? run.stage - 1 : run.stage);
     final style = TextStyle(

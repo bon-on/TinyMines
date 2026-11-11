@@ -11,6 +11,7 @@ import 'package:tiny_mines/src/game/garden_run.dart';
 import 'package:tiny_mines/src/meta/garden_progress.dart';
 import 'package:tiny_mines/src/meta/garden_progress_store.dart';
 import 'package:tiny_mines/src/ui/garden_board.dart';
+import 'package:tiny_mines/src/ui/garden_cards.dart';
 import 'package:tiny_mines/src/ui/garden_ui.dart';
 
 import 'support/fake_stopwatch.dart';
@@ -95,7 +96,18 @@ List<Finder> get _controls => [
   find.byKey(const ValueKey('garden-run-cta')),
   find.byKey(const ValueKey('board-hearts')),
   find.byType(LevelBadge),
+  find.byType(GardenButton),
+  find.byKey(const ValueKey('compact-run-hud')),
 ];
+
+/// The Hard segment: "Hard 12x12", or "Hard" where labels are shortened.
+Finder get _hard => find.text('Hard 12x12').evaluate().isNotEmpty
+    ? find.text('Hard 12x12')
+    : find.text('Hard');
+
+/// Rendered (scaled) height of the first match of [finder].
+double _textHeight(WidgetTester tester, Finder finder) =>
+    tester.getRect(finder.first).height;
 
 void _expectBoardClear(WidgetTester tester, Size size) {
   final board = tester.getRect(_board);
@@ -170,7 +182,7 @@ void main() {
           expect(find.byKey(const ValueKey('garden-run-cta')), findsOneWidget);
         }
         if (state == _State.hard) {
-          await tester.tap(find.text('Hard 12x12'));
+          await tester.tap(_hard);
           await tester.pumpAndSettle();
           expect(_tiles, findsNWidgets(144));
         }
@@ -181,6 +193,8 @@ void main() {
         expect(tester.takeException(), isNull);
         final board = tester.getRect(_board);
         expect(board.height, greaterThanOrEqualTo(minSide));
+        // Difficulty labels stay readable (14 px design size).
+        expect(_textHeight(tester, _hard), greaterThanOrEqualTo(11));
         _expectBoardClear(tester, size);
         if (state == _State.hard) {
           expect(tester.getSize(_tiles.first).width, greaterThanOrEqualTo(14));
@@ -226,12 +240,15 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(find.byType(GardenOverlay), findsOneWidget);
 
       // How to play, on a fresh screen.
+      await tester.pumpWidget(const SizedBox.shrink());
       await _pump(tester, size);
       await tester.tap(find.byTooltip('How to play'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(find.byType(HowToPlayOverlay), findsOneWidget);
     });
 
     testWidgets('the result card fits at $size', (tester) async {
@@ -306,6 +323,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(_tiles, findsNWidgets(144));
       expect(find.byKey(const ValueKey('boss-tag')), findsOneWidget);
+      // The stage and BOSS tag stay readable in the slim run status.
+      expect(
+        _textHeight(
+          tester,
+          find.descendant(
+            of: find.byKey(const ValueKey('boss-tag')),
+            matching: find.text('BOSS'),
+          ),
+        ),
+        greaterThanOrEqualTo(10),
+      );
+      expect(
+        _textHeight(tester, find.text('Stage 10')),
+        greaterThanOrEqualTo(14),
+      );
       final cell = tester.getSize(_tiles.first);
       expect(cell.width, greaterThanOrEqualTo(14));
       _expectBoardClear(tester, size);

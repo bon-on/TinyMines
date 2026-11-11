@@ -4,6 +4,7 @@ title: Tiny Mines CrazyGames web distribution contract
 status: active
 related_specs:
   - feature-tiny-mines-crazygames
+  - feature-short-viewport-layout
   - feature-sound-effects
   - feature-retention-polish
   - feature-crazygames-cloud-save

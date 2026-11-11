@@ -4,6 +4,7 @@ title: Tiny Mines GamePix web distribution contract
 status: active
 related_specs:
   - feature-tiny-mines-gamepix
+  - feature-short-viewport-layout
   - feature-next-goal-share
   - feature-game-feel-polish
 evidence_files:
