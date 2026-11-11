@@ -258,6 +258,7 @@ class GardenIconButton extends StatelessWidget {
     required this.onPressed,
     this.size = 44,
     this.badge,
+    this.selected = false,
   });
 
   final GardenPalette palette;
@@ -265,6 +266,9 @@ class GardenIconButton extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onPressed;
   final double size;
+
+  /// Accent filled, for icon-only toggles (Dig/Flag on short screens).
+  final bool selected;
 
   /// Small count shown on the corner (hints left); hidden when null or 0.
   final int? badge;
@@ -279,11 +283,17 @@ class GardenIconButton extends StatelessWidget {
       constraints: BoxConstraints.tightFor(width: size, height: size),
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
-        foregroundColor: palette.textPrimary,
-        backgroundColor: palette.panel,
+        // Small buttons (compact layouts) keep their visual size as the tap
+        // target so a row of them fits a slim column.
+        tapTargetSize: size < 44 ? MaterialTapTargetSize.shrinkWrap : null,
+        foregroundColor: selected ? palette.onAccent : palette.textPrimary,
+        backgroundColor: selected ? palette.accent : palette.panel,
         disabledForegroundColor: palette.textSecondary.withValues(alpha: 0.6),
         disabledBackgroundColor: palette.panel.withValues(alpha: 0.6),
-        side: BorderSide(color: palette.panelBorder, width: 2),
+        side: BorderSide(
+          color: selected ? palette.accent : palette.panelBorder,
+          width: 2,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       icon: Badge(

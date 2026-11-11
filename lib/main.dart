@@ -40,6 +40,30 @@ Future<void> main() async {
   runApp(TinyMinesApp(platform: platform));
 }
 
+/// Screen arrangement for a window size (feature-short-viewport-layout).
+enum ScreenLayout {
+  /// Side panels left and right of the board (desktop, phone landscape).
+  wide,
+
+  /// Board first between two slim columns: landscape windows too narrow for
+  /// [wide], such as portal preview frames (620x349, 640x480).
+  compact,
+
+  /// One column (portrait and square windows).
+  stacked,
+}
+
+/// The layout used for a window of [size] (the SafeArea box).
+ScreenLayout screenLayoutFor(Size size) {
+  if (size.width >= 760 && size.width / size.height >= 1.25) {
+    return ScreenLayout.wide;
+  }
+  return size.width > size.height ? ScreenLayout.compact : ScreenLayout.stacked;
+}
+
+/// Stacked windows shorter than this fold the controls into fewer rows.
+const double shortStackedHeight = 700;
+
 class TinyMinesApp extends StatelessWidget {
   const TinyMinesApp({
     super.key,
@@ -1145,11 +1169,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, box) {
-                final wide =
-                    box.maxWidth >= 760 && box.maxWidth / box.maxHeight >= 1.25;
-                return wide
-                    ? _wideLayout(palette, box)
-                    : _narrowLayout(palette);
+                return switch (screenLayoutFor(box.biggest)) {
+                  ScreenLayout.wide => _wideLayout(palette, box),
+                  ScreenLayout.compact => _compactLayout(palette),
+                  ScreenLayout.stacked => _narrowLayout(
+                    palette,
+                    short: box.maxHeight < shortStackedHeight,
+                  ),
+                };
               },
             ),
           ),
@@ -1187,15 +1214,17 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
-  List<Widget> _toolButtons(GardenPalette palette) => [
+  List<Widget> _toolButtons(GardenPalette palette, {double size = 44}) => [
     GardenIconButton(
       palette: palette,
       icon: Icons.help_outline,
       tooltip: 'How to play',
+      size: size,
       onPressed: _openTutorial,
     ),
     GardenIconButton(
       palette: palette,
+      size: size,
       icon: _sound.userMuted
           ? Icons.volume_off_rounded
           : Icons.volume_up_rounded,
@@ -1204,6 +1233,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     ),
     GardenIconButton(
       palette: palette,
+      size: size,
       icon: Icons.lightbulb,
       tooltip: _run != null
           ? 'Reveal one safe tile'
@@ -1213,6 +1243,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     ),
     GardenIconButton(
       palette: palette,
+      size: size,
       icon: Icons.refresh,
       tooltip: _run != null ? 'Restart run' : 'Restart',
       onPressed: _run != null ? _startGardenRun : _restart,
@@ -1305,33 +1336,47 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         ),
         if (_over && !_summaryOpen) ...[
           const SizedBox(height: 8),
-          GardenButton(
-            palette: palette,
-            label: _run == null
-                ? 'New Field'
-                : _stageDone
-                ? 'Next stage'
-                : 'New Run',
-            icon: _stageDone ? Icons.arrow_forward_rounded : Icons.refresh,
-            height: 44,
-            onPressed: _run == null
-                ? _restart
-                : _stageDone
-                ? _advanceStage
-                : _startGardenRun,
-          ),
+          _endButton(palette),
         ],
       ],
     );
   }
 
-  Widget _narrowLayout(GardenPalette palette) {
+  /// "New Field" / "Next stage" / "New Run" once a board has ended.
+  Widget _endButton(GardenPalette palette, {double height = 44}) {
+    return GardenButton(
+      palette: palette,
+      label: _run == null
+          ? 'New Field'
+          : _stageDone
+          ? 'Next stage'
+          : 'New Run',
+      icon: _stageDone ? Icons.arrow_forward_rounded : Icons.refresh,
+      height: height,
+      onPressed: _run == null
+          ? _restart
+          : _stageDone
+          ? _advanceStage
+          : _startGardenRun,
+    );
+  }
+
+  /// Stacked layout. [short] windows (under [shortStackedHeight]) put the
+  /// Garden Run entry, Daily and Garden in one row and Dig/Flag (as icon
+  /// toggles) beside the difficulty, and drop the XP footer, so the board
+  /// keeps most of the height.
+  Widget _narrowLayout(GardenPalette palette, {bool short = false}) {
     final tools = _toolButtons(palette);
+    // On short windows the tips take the status line's place (feedback and
+    // the end of a board still show it), as on short wide screens.
+    final tipsForStatus =
+        short && _onboarding && _boardFeedback == null && !_over;
+    final gap = short ? 6.0 : 8.0;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          padding: EdgeInsets.fromLTRB(12, short ? 6 : 8, 12, short ? 8 : 10),
           child: Column(
             children: [
               _gate(
@@ -1345,7 +1390,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: gap),
               _gate(
                 GardenPanel(
                   palette: palette,
@@ -1367,36 +1412,363 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              _gate(
-                DifficultyPicker(
-                  palette: palette,
-                  selected: _dailyDay == null && _run == null
-                      ? _difficulty
-                      : null,
-                  onChanged: _selectDifficulty,
+              SizedBox(height: gap),
+              if (short) ...[
+                _gate(_shortMetaRow(palette)),
+                SizedBox(height: gap),
+                _gate(
+                  Row(
+                    children: [
+                      _modeIcon(palette, false),
+                      const SizedBox(width: 6),
+                      _modeIcon(palette, true),
+                      const SizedBox(width: 8),
+                      Expanded(child: _difficultyPicker(palette)),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              _gate(_runStrip(palette)),
-              const SizedBox(height: 8),
-              _gate(_modeControls(palette)),
-              const SizedBox(height: 6),
+              ] else ...[
+                _gate(_difficultyPicker(palette)),
+                const SizedBox(height: 8),
+                _gate(_runStrip(palette)),
+                const SizedBox(height: 8),
+                _gate(_modeControls(palette)),
+              ],
+              SizedBox(height: short ? 4 : 6),
               if (_onboarding) ...[
-                _tipStrip(palette, compact: false),
+                _tipStrip(palette, compact: short),
                 const SizedBox(height: 6),
               ],
               Expanded(child: _board(palette)),
-              const SizedBox(height: 8),
-              _statusArea(palette),
-              const SizedBox(height: 8),
-              _gate(_narrowFooter(palette)),
+              if (!tipsForStatus) ...[
+                SizedBox(height: gap),
+                _statusArea(palette),
+              ],
+              if (!short) ...[
+                const SizedBox(height: 8),
+                _gate(_narrowFooter(palette)),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _difficultyPicker(GardenPalette palette, {bool vertical = false}) =>
+      DifficultyPicker(
+        palette: palette,
+        vertical: vertical,
+        selected: _dailyDay == null && _run == null ? _difficulty : null,
+        onChanged: _selectDifficulty,
+      );
+
+  /// Icon-only Dig/Flag toggle for short windows; the label stays as the
+  /// tooltip and semantics label.
+  Widget _modeIcon(GardenPalette palette, bool flag) {
+    return Semantics(
+      key: ValueKey(flag ? 'flag-mode' : 'dig-mode'),
+      selected: _flagMode == flag,
+      child: GardenIconButton(
+        palette: palette,
+        icon: flag ? Icons.flag_rounded : Icons.touch_app_rounded,
+        tooltip: flag ? 'Flag' : 'Dig',
+        selected: _flagMode == flag,
+        size: 42,
+        onPressed: _over ? null : () => _setFlagMode(flag),
+      ),
+    );
+  }
+
+  bool get _dailyDone => _progress.dailyResult(_today) != null;
+
+  VoidCallback? get _dailyAction =>
+      !_progressLoaded || (_dailyDay != null && !_over) ? null : _startDaily;
+
+  /// Short stacked windows: level, Garden Run entry (or live status), Daily
+  /// and Garden in one row.
+  Widget _shortMetaRow(GardenPalette palette) {
+    final run = _run;
+    return SizedBox(
+      height: 50,
+      child: Row(
+        children: [
+          if (run == null) ...[
+            LevelBadge(palette: palette, level: _progress.level, size: 40),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            child: run != null
+                ? GardenPanel(
+                    palette: palette,
+                    radius: 25,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Center(child: _runHud(palette, run)),
+                  )
+                : Center(child: _runEntry(palette, height: 44)),
+          ),
+          const SizedBox(width: 6),
+          GardenIconButton(
+            palette: palette,
+            icon: _dailyDone
+                ? Icons.check_rounded
+                : Icons.calendar_today_rounded,
+            tooltip: _dailyDone ? 'Practice daily' : 'Daily',
+            onPressed: _dailyAction,
+          ),
+          const SizedBox(width: 6),
+          GardenIconButton(
+            palette: palette,
+            icon: Icons.local_florist_rounded,
+            tooltip: 'Garden',
+            onPressed: _openGarden,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The Garden Run entry while no run is playing: the call to action until
+  /// the first run, then a plain button.
+  Widget _runEntry(GardenPalette palette, {double height = 44}) {
+    if (_promoteRun) {
+      return GardenRunCta(
+        palette: palette,
+        compact: true,
+        onStart: _startGardenRun,
+      );
+    }
+    final best = _progress.bestRunStage;
+    return SizedBox(
+      width: double.infinity,
+      child: GardenButton(
+        palette: palette,
+        label: best > 0 ? 'Garden Run - best $best' : 'Garden Run',
+        icon: Icons.favorite_rounded,
+        height: height,
+        onPressed: _progressLoaded ? _startGardenRun : null,
+      ),
+    );
+  }
+
+  /// A column of [width] whose content is laid out at that width and scaled
+  /// down (never up) when it is taller than the window.
+  Widget _fitColumn(double width, List<Widget> children) {
+    return SizedBox(
+      width: width,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: width,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Short landscape windows narrower than the wide layout (portal preview
+  /// frames such as 620x349 or 640x480): the board takes the middle and all
+  /// of the height; slim columns hold the rest.
+  Widget _compactLayout(GardenPalette palette) {
+    final run = _run;
+    final stats = _stats;
+    Widget tile(int i) => Expanded(
+      child: StatTile(palette: palette, label: stats[i].$1, value: stats[i].$2),
+    );
+    const fontSize = 12.0;
+    const lineHeight = 1.25;
+    final threeLines =
+        MediaQuery.textScalerOf(context).scale(fontSize) * lineHeight * 3 + 12;
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _fitColumn(_compactLeft, [
+            Row(
+              children: [
+                LevelBadge(palette: palette, level: _progress.level, size: 30),
+                const SizedBox(width: 6),
+                Expanded(child: _title(palette, size: 24)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _gate(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: _toolButtons(palette, size: 38),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _gate(
+              run != null
+                  ? GardenPanel(
+                      palette: palette,
+                      radius: 16,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: _compactRunHud(palette, run),
+                    )
+                  : _runEntry(palette, height: 40),
+            ),
+            const SizedBox(height: 8),
+            GardenPanel(
+              palette: palette,
+              radius: 16,
+              padding: const EdgeInsets.all(5),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      tile(0),
+                      const SizedBox(width: 4),
+                      tile(1),
+                      const SizedBox(width: 4),
+                      tile(3),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(children: [tile(2), const SizedBox(width: 4), tile(4)]),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              key: const ValueKey('status-line'),
+              constraints: BoxConstraints(minHeight: threeLines),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: palette.panel,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                _status,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _lost ? palette.danger : palette.textPrimary,
+                  fontSize: fontSize,
+                  height: lineHeight,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (_over && !_summaryOpen) ...[
+              const SizedBox(height: 6),
+              _endButton(palette, height: 38),
+            ],
+          ]),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              children: [
+                if (_onboarding) ...[
+                  _tipStrip(palette, compact: true),
+                  const SizedBox(height: 6),
+                ],
+                Expanded(child: _board(palette)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          _gate(
+            _fitColumn(_compactRight, [
+              _modeButton(palette, false, height: 42),
+              const SizedBox(height: 6),
+              _modeButton(palette, true, height: 42),
+              const SizedBox(height: 10),
+              _difficultyPicker(palette, vertical: true),
+              const SizedBox(height: 10),
+              GardenButton(
+                palette: palette,
+                label: _dailyDone ? 'Practice' : 'Daily',
+                icon: _dailyDone
+                    ? Icons.check_rounded
+                    : Icons.calendar_today_rounded,
+                height: 38,
+                onPressed: _dailyAction,
+              ),
+              const SizedBox(height: 6),
+              GardenButton(
+                palette: palette,
+                label: 'Garden',
+                icon: Icons.local_florist_rounded,
+                primary: false,
+                height: 38,
+                onPressed: _openGarden,
+              ),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Garden Run status for the slim compact column: stage (and boss tag)
+  /// over the run clock. The hearts show in the large row above the board.
+  Widget _compactRunHud(GardenPalette palette, GardenRunState run) {
+    final stage = GardenRun.stage(_stageDone ? run.stage - 1 : run.stage);
+    final style = TextStyle(
+      fontWeight: FontWeight.w900,
+      fontSize: 17,
+      color: palette.textPrimary,
+    );
+    return Column(
+      key: const ValueKey('compact-run-hud'),
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Stage ${stage.stage}', style: style),
+              if (stage.boss) ...[
+                const SizedBox(width: 8),
+                Container(
+                  key: const ValueKey('boss-tag'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.flowerCenter,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'BOSS',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      color: Color(0xFF3B2A05),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Text(
+          'Run ${formatTime(_runSeconds)}',
+          style: style.copyWith(fontSize: 14, color: palette.textSecondary),
+        ),
+      ],
+    );
+  }
+
+  static const double _compactLeft = 160;
+  static const double _compactRight = 118;
 
   Widget _tipStrip(GardenPalette palette, {required bool compact}) =>
       OnboardingStrip(

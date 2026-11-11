@@ -210,6 +210,8 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
   @override
   Widget build(BuildContext context) {
     final palette = widget.palette;
+    // Portal preview frames (620x349, 560x315) get a slimmer card margin.
+    final lowScreen = MediaQuery.sizeOf(context).height < 380;
     return Focus(
       focusNode: _focus,
       onKeyEvent: _onKey,
@@ -227,7 +229,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                 SafeArea(
                   child: Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(14),
+                      padding: EdgeInsets.all(lowScreen ? 8 : 14),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 420),
                         child: Opacity(
@@ -239,18 +241,19 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                               child: GardenPanel(
                                 palette: palette,
                                 radius: 28,
-                                padding: const EdgeInsets.fromLTRB(
-                                  22,
-                                  18,
-                                  22,
-                                  16,
-                                ),
+                                padding: lowScreen
+                                    ? const EdgeInsets.fromLTRB(18, 10, 18, 8)
+                                    : const EdgeInsets.fromLTRB(22, 18, 22, 16),
                                 // Actions stay pinned under the scrolling
                                 // details so they are visible on short
                                 // screens (844x390) without scrolling.
                                 child: LayoutBuilder(
                                   builder: (context, box) {
                                     final short = box.maxHeight < 480;
+                                    // Portal preview frames (620x349,
+                                    // 560x315): no art, smaller tiles, so
+                                    // the XP row shows above the actions.
+                                    final tight = box.maxHeight < 300;
                                     return Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -259,6 +262,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                                             child: _content(
                                               palette,
                                               short: short,
+                                              tight: tight,
                                             ),
                                           ),
                                         ),
@@ -282,7 +286,11 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
     );
   }
 
-  Widget _content(GardenPalette palette, {required bool short}) {
+  Widget _content(
+    GardenPalette palette, {
+    required bool short,
+    bool tight = false,
+  }) {
     final report = widget.report;
     final outcome = report.outcome;
     final garden = report.garden;
@@ -311,16 +319,18 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Transform.scale(
-          scale: 0.6 + 0.4 * _phase(0.05, 0.3, Curves.elasticOut),
-          child: TileArt(
-            palette: palette,
-            look: report.won ? TileLook.flower : TileLook.moleHit,
-            size: short ? 44 : 76,
-            seed: 4,
+        if (!tight) ...[
+          Transform.scale(
+            scale: 0.6 + 0.4 * _phase(0.05, 0.3, Curves.elasticOut),
+            child: TileArt(
+              palette: palette,
+              look: report.won ? TileLook.flower : TileLook.moleHit,
+              size: short ? 44 : 76,
+              seed: 4,
+            ),
           ),
-        ),
-        SizedBox(height: short ? 2 : 6),
+          SizedBox(height: short ? 2 : 6),
+        ],
         Text(
           title,
           textAlign: TextAlign.center,
@@ -338,7 +348,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
             color: palette.textSecondary,
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: tight ? 8 : 14),
         if (garden)
           Row(
             children: [
@@ -347,7 +357,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                   palette: palette,
                   label: 'STAGE',
                   value: '${report.stageReached}',
-                  large: true,
+                  large: !tight,
                 ),
               ),
               const SizedBox(width: 10),
@@ -356,7 +366,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                   palette: palette,
                   label: 'CLEARED',
                   value: '${report.stagesCleared}',
-                  large: true,
+                  large: !tight,
                 ),
               ),
               const SizedBox(width: 10),
@@ -365,7 +375,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                   palette: palette,
                   label: 'TIME',
                   value: formatTime(report.seconds),
-                  large: true,
+                  large: !tight,
                 ),
               ),
             ],
@@ -378,7 +388,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                   palette: palette,
                   label: 'TIME',
                   value: report.won ? formatTime(report.seconds) : '--',
-                  large: true,
+                  large: !tight,
                 ),
               ),
               const SizedBox(width: 10),
@@ -389,7 +399,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                   value: report.daily
                       ? '${outcome.streak} d'
                       : (best == null ? '--' : formatTime(best)),
-                  large: true,
+                  large: !tight,
                 ),
               ),
             ],
@@ -405,7 +415,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
             ),
           ),
         ],
-        const SizedBox(height: 14),
+        SizedBox(height: tight ? 10 : 14),
         Row(
           children: [
             LevelBadge(palette: palette, level: shown.level, size: 46),
