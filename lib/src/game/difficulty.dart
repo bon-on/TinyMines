@@ -2,7 +2,8 @@
 enum Difficulty {
   easy('Easy', 6, 5, 3),
   normal('Normal', 9, 12, 3),
-  hard('Hard', 12, 26, 4);
+  hard('Hard', 12, 26, 4),
+  expert('Expert', 14, 40, 4);
 
   const Difficulty(this.label, this.size, this.mines, this.hints);
 
@@ -15,6 +16,9 @@ enum Difficulty {
   String get title => '$label ${size}x$size';
 
   double get gap => size > 10 ? 3 : 4;
+
+  /// Boards drawn until a solver opens every safe tile without a guess.
+  bool get guessFree => this == expert;
 
   /// The next harder preset, or null for [hard].
   Difficulty? get next => index + 1 < values.length ? values[index + 1] : null;

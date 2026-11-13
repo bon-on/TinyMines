@@ -10,6 +10,11 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   theme, daily results and the daily streak are stored locally under
   `garden_progress_v1`. Older `best_time_<difficulty>` records are migrated on
   load (the faster time wins) and kept in sync.
+- Expert garden (feature-expert-garden): a fourth difficulty, 14x14 with 40
+  moles and 4 hints (300 XP per win). Its boards are guess-free: a solver that
+  only uses visible clues must open every safe tile from your first dig, so a
+  hard board never needs a 50:50 guess. Easy keeps its own guess-free
+  generator; Normal, Hard, Garden Run and the daily are unchanged.
 - Levels unlock cosmetic themes: Spring (Lv1), Autumn (Lv3), Winter (Lv6),
   Night (Lv10).
 - Daily garden: one Normal board per local day, the same for everyone, with a

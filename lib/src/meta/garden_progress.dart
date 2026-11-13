@@ -191,6 +191,7 @@ class GardenProgress {
     Difficulty.easy => 30,
     Difficulty.normal => 70,
     Difficulty.hard => 150,
+    Difficulty.expert => 300,
   };
 
   /// XP needed to go from [level] to the next one.

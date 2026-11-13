@@ -461,6 +461,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       mineCount: _difficulty.mines,
       random: widget.random,
       requireLogicalSolution: _difficulty == Difficulty.easy,
+      guessFree: _difficulty.guessFree,
     );
     _hints = _difficulty.hints;
     setState(() {});

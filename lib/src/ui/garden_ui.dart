@@ -386,6 +386,7 @@ class DifficultyPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final count = Difficulty.values.length;
     final segments = [
       for (final option in Difficulty.values)
         _Segment(
@@ -397,7 +398,7 @@ class DifficultyPicker extends StatelessWidget {
         ),
     ];
     return Container(
-      height: vertical ? 3 * 34 + 10 : 42,
+      height: vertical ? count * 34 + 10 : 42,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: palette.panel,
@@ -442,7 +443,7 @@ class _Segment extends StatelessWidget {
           onTap: onTap,
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(

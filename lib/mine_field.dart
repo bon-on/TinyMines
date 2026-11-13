@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'fair_easy_field.dart';
+import 'src/game/fair_field.dart';
 
 class MineCell {
   bool mine = false;
@@ -19,6 +20,7 @@ class MineField {
     required this.mineCount,
     math.Random? random,
     this.requireLogicalSolution = false,
+    this.guessFree = false,
     this.survivable = false,
   }) : _random = random ?? math.Random(),
        cells = List.generate(size * size, (_) => MineCell()) {
@@ -35,6 +37,16 @@ class MineField {
   /// Regular Easy can opt into bounded, no-guess board selection. The default
   /// path is unchanged for daily seeds and other difficulties.
   final bool requireLogicalSolution;
+
+  /// Draws mole layouts until a general solver finishes the board without a
+  /// guess (feature-expert-garden). Works for any size; Easy 6x6/5 keeps its
+  /// own [requireLogicalSolution] path. Dated daily layouts never use it.
+  final bool guessFree;
+
+  /// Whether the last [plantMines] found a verified guess-free layout; null
+  /// when the board did not use [guessFree] or is not armed yet.
+  bool? get guessFreeVerified => _guessFreeVerified;
+  bool? _guessFreeVerified;
 
   /// Garden Run boards: a dug mine is shown as a flagged, exploded mole and
   /// play continues (the caller charges a heart). Only [exhaust] ends such a
@@ -86,6 +98,17 @@ class MineField {
   void plantMines(int safeIndex) {
     if (requireLogicalSolution) {
       plantMinesAt(FairEasyField.generate(safeIndex, _random));
+      return;
+    }
+    if (guessFree) {
+      final layout = FairField.generate(
+        size: size,
+        mineCount: mineCount,
+        start: safeIndex,
+        random: _random,
+      );
+      _guessFreeVerified = layout.verified;
+      plantMinesAt(layout.mines);
       return;
     }
     final blocked = {safeIndex, ...neighbors(safeIndex)};
