@@ -9,6 +9,7 @@ import 'package:tiny_mines/src/game/difficulty.dart';
 import 'package:tiny_mines/src/game/fair_field.dart';
 import 'package:tiny_mines/src/game/mine_logic.dart';
 import 'package:tiny_mines/src/meta/garden_progress.dart';
+import 'package:tiny_mines/src/ui/garden_cards.dart';
 import 'package:tiny_mines/src/meta/daily_challenge.dart';
 
 void main() {
@@ -130,16 +131,38 @@ void main() {
       expect(mines(), mines());
     });
 
-    test('with no attempts left the layout is returned unverified', () {
-      final layout = FairField.generate(
-        size: 14,
-        mineCount: 40,
-        start: 90,
-        random: math.Random(5),
-        attempts: 0,
+    test('when the draws run out the last layout is returned unverified', () {
+      // Find a seed whose first draw is not guess-free (about 4 in 5).
+      for (var seed = 0; seed < 50; seed++) {
+        final layout = FairField.generate(
+          size: 14,
+          mineCount: 40,
+          start: 90,
+          random: math.Random(seed),
+          attempts: 1,
+        );
+        if (layout.verified) continue;
+        expect(layout.attempts, 1);
+        expect(layout.mines.toSet(), hasLength(40));
+        expect(layout.mines, isNot(contains(90)));
+        final logic = MineLogic(14, 40);
+        expect(layout.mines.any(logic.neighbors(90).contains), isFalse);
+        return;
+      }
+      fail('every first draw was verified, which should be very unlikely');
+    });
+
+    test('needs at least one draw', () {
+      expect(
+        () => FairField.generate(
+          size: 14,
+          mineCount: 40,
+          start: 90,
+          random: math.Random(5),
+          attempts: 0,
+        ),
+        throwsRangeError,
       );
-      expect(layout.verified, isFalse);
-      expect(layout.attempts, 0);
     });
 
     test('rejects impossible requests', () {
@@ -192,6 +215,28 @@ void main() {
   });
 
   group('progress', () {
+    test('an Expert win is recorded under expert and pays 300 XP', () {
+      const start = GardenProgress.initial();
+      final outcome = start.applyRun(
+        const RunResult(
+          difficulty: Difficulty.expert,
+          won: true,
+          seconds: 400,
+          revealedFraction: 1,
+        ),
+      );
+      final p = outcome.progress;
+      expect(p.bestTime(Difficulty.expert), 400);
+      expect(p.wins['expert'], 1);
+      expect(p.plays['expert'], 1);
+      expect(p.bestTime(Difficulty.hard), isNull);
+      expect(outcome.xpGained, greaterThanOrEqualTo(300));
+      // The save round trips with the Expert records.
+      final back = GardenProgress.fromJson(p.toJson());
+      expect(back.bestTime(Difficulty.expert), 400);
+      expect(back.wins['expert'], 1);
+    });
+
     test('old saves without Expert load with empty records', () {
       final progress = GardenProgress.fromJson({
         'bestTimes': {'easy': 60},
@@ -249,7 +294,27 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(const TinyMinesApp());
       await tester.pumpAndSettle();
-      expect(find.text('Expert'), findsWidgets);
+      final rows = find.descendant(
+        of: find.byType(RecordsCard),
+        matching: find.byType(Row),
+      );
+      expect(rows, findsWidgets);
+      expect(
+        find.descendant(
+          of: find.byType(RecordsCard),
+          matching: find.text('Expert'),
+        ),
+        findsOneWidget,
+      );
+      for (final label in ['Easy', 'Normal', 'Hard']) {
+        expect(
+          find.descendant(
+            of: find.byType(RecordsCard),
+            matching: find.text(label),
+          ),
+          findsOneWidget,
+        );
+      }
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });

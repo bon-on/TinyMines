@@ -20,7 +20,7 @@ enum Difficulty {
   /// Boards drawn until a solver opens every safe tile without a guess.
   bool get guessFree => this == expert;
 
-  /// The next harder preset, or null for [hard].
+  /// The next harder preset, or null for [expert].
   Difficulty? get next => index + 1 < values.length ? values[index + 1] : null;
 
   static Difficulty? fromName(String? name) {

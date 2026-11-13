@@ -32,3 +32,6 @@ Expert generation in the Chrome (dart2js) test, 40 boards: 15.3 ms per board on 
 - Real phone feel: tiles are about 25 px wide at 390 px and 17 px on an 844x390 landscape window.
 - Whether players want Expert, and whether guess-free Hard/Normal would help (not done, out of scope).
 - Leaderboard offer: Expert wins are offered like every other difficulty (existing behaviour, only on the Pages build).
+
+## Review follow-up
+Independent review (approve with comments, no Critical/High; the solver was judged sound and the guess-free claim truthful) led to: rejecting `attempts < 1` in `FairField.generate`, a real unverified-fallback test (the old one used zero attempts and returned no moles), a progress test for an Expert win and its save round trip, a stricter Records row test, a doc comment fix and removal of dead code. Open questions kept: Expert records are dropped if an older client re-saves the cloud save (rollback risk), and about 17 px tiles on an 844x390 window are small for touch. Not re-reviewed after these fixes.

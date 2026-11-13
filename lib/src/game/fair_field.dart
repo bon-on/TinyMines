@@ -35,6 +35,7 @@ class FairField {
   }) {
     final cells = size * size;
     RangeError.checkValueInInterval(start, 0, cells - 1, 'start');
+    RangeError.checkValueInInterval(attempts, 1, 100000, 'attempts');
     final logic = MineLogic(size, mineCount);
     final blocked = {start, ...logic.neighbors(start)};
     final candidates = [

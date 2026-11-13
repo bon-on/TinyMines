@@ -268,7 +268,6 @@ class _Run {
         }
       }
     }
-    final index = {for (var i = 0; i < order.length; i++) order[i]: i};
     final assigned = List<int>.filled(group.length, 0);
     final left = [for (final c in group) c.cells.length];
     final value = List<int>.filled(order.length, 0);
@@ -325,7 +324,5 @@ class _Run {
       if (!canMine[i]) safe.add(order[i]);
       if (!canSafe[i]) mines.add(order[i]);
     }
-    // `index` keeps the cell order stable for debugging.
-    assert(index.length == order.length);
   }
 }
