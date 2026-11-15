@@ -74,6 +74,7 @@ Future<void> _pump(
         now: () => DateTime(2026, 11, 2, 9),
         platform: platform ?? const NoopGamePlatform(),
         soundFx: soundFx,
+        gardenTools: false,
       ),
     ),
   );

@@ -67,6 +67,7 @@ Future<void> _pump(WidgetTester tester, Size size, {bool first = false}) async {
         stopwatch: FakeStopwatch(),
         now: () => DateTime(2026, 11, 2, 9),
         platform: const NoopGamePlatform(allowsResultRegistration: false),
+        gardenTools: false,
       ),
     ),
   );

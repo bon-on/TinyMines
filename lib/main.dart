@@ -13,6 +13,7 @@ import 'src/art/garden_scenery.dart';
 import 'src/audio/sound_fx.dart';
 import 'src/game/difficulty.dart';
 import 'src/game/garden_run.dart';
+import 'src/game/garden_tools.dart';
 import 'src/meta/daily_challenge.dart';
 import 'src/meta/garden_plots.dart';
 import 'src/meta/garden_progress.dart';
@@ -25,6 +26,7 @@ import 'src/ui/garden_ui.dart';
 import 'src/ui/onboarding_strip.dart';
 import 'src/share/result_copy.dart';
 import 'src/ui/run_summary_overlay.dart';
+import 'src/ui/tool_picker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -117,7 +119,16 @@ class TinyMinesScreen extends StatefulWidget {
     this.soundFx,
     this.now,
     this.resultCopier = const ResultCopier(),
+    this.gardenTools = true,
+    this.toolRandom,
   });
+
+  /// Garden Run offers a tool after each cleared stage (feature-garden-tools);
+  /// tests of the plain stage flow turn it off.
+  final bool gardenTools;
+
+  /// Draws the tool offers; tests pass a seeded generator.
+  final math.Random? toolRandom;
 
   /// Clipboard access for "Copy result"; tests inject a fake.
   final ResultCopier resultCopier;
@@ -202,6 +213,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// The stage was just cleared; the next one starts after a short pause.
   bool _stageDone = false;
+
+  /// Tools on offer between stages (feature-garden-tools), or null.
+  List<GardenTool>? _toolOffer;
 
   /// The cleared stage was a boss that restored a heart.
   bool _healedOnClear = false;
@@ -346,7 +360,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     }
   }
 
-  bool get _overlayOpen => _tutorialOpen || _gardenOpen;
+  bool get _overlayOpen => _tutorialOpen || _gardenOpen || _toolOffer != null;
 
   /// Reports gameplay start/stop to the platform exactly on transitions:
   /// running only after the tutorial check, while no overlay is open and the
@@ -381,6 +395,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _syncGameplay();
     _resumeClock();
     _markTutorialSeen();
+    _advanceStage();
   }
 
   void _openGarden() {
@@ -394,6 +409,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     setState(() => _gardenOpen = false);
     _syncGameplay();
     _resumeClock();
+    _advanceStage();
   }
 
   void _resumeClock() {
@@ -442,6 +458,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _runStarted = false;
     _hitIndex = null;
     _stageDone = false;
+    _toolOffer = null;
     _advanceTimer?.cancel();
     _advanceTimer = null;
     _report = null;
@@ -529,7 +546,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       requireLogicalSolution: config.fairStart,
       survivable: true,
     );
-    _fx.banner(_stageBanner(run.stage));
+    _fx.banner(_stageBanner(run.stage, run));
     if (_stageBannerPlot(run.stage) != null) _sound.play(Sfx.newBest);
     setState(() {});
     _syncGameplay();
@@ -548,17 +565,18 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     return null;
   }
 
-  FxBanner _stageBanner(int stage) {
+  FxBanner _stageBanner(int stage, GardenRunState run) {
     final config = GardenRun.stage(stage);
     final plot = _stageBannerPlot(stage);
     final size = '${config.size}x${config.size}';
+    final tools = _toolsLabel(run);
     if (plot != null) {
       return FxBanner(
         kind: FxBannerKind.plot,
         title: 'New plot: ${plot.label}',
         subtitle: config.boss
             ? 'Boss garden! $size, ${config.mines} moles - clear it to heal'
-            : 'Stage $stage reached - $size, ${config.mines} moles',
+            : 'Stage $stage reached - $size, ${config.mines} moles$tools',
         plot: plot,
       );
     }
@@ -566,18 +584,56 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       return FxBanner(
         kind: FxBannerKind.boss,
         title: 'Boss garden!',
-        subtitle: '$size, ${config.mines} moles - clear it to heal',
+        subtitle: '$size, ${config.mines} moles - clear it to heal$tools',
       );
     }
     return FxBanner(
       kind: FxBannerKind.stage,
       title: 'Stage $stage',
-      subtitle: '$size garden, ${config.mines} moles',
+      subtitle: '$size garden, ${config.mines} moles$tools',
     );
   }
 
+  /// " - Clover x1, Can x2" for the tools a run is carrying, else empty.
+  String _toolsLabel(GardenRunState run) {
+    final parts = [
+      if (run.clovers > 0) 'Clover x${run.clovers}',
+      if (run.cans > 0) 'Can x${run.cans}',
+    ];
+    return parts.isEmpty ? '' : ' - ${parts.join(', ')}';
+  }
+
+  /// Opens the tool picker after a cleared stage (the next stage starts when
+  /// a tool is picked). Without an eligible tool the next stage starts at once.
   void _advanceStage() {
-    if (_run == null || !_stageDone) return;
+    final run = _run;
+    if (run == null || !_stageDone || _toolOffer != null) return;
+    // A card is open: the picker waits and opens when the card closes.
+    if (_tutorialOpen || _gardenOpen) return;
+    _advanceTimer?.cancel();
+    _advanceTimer = null;
+    final offer = widget.gardenTools
+        ? GardenTools.offer(run, widget.toolRandom ?? math.Random())
+        : const <GardenTool>[];
+    if (offer.isEmpty) {
+      _startNextStage();
+      return;
+    }
+    setState(() => _toolOffer = offer);
+    _syncGameplay();
+  }
+
+  void _pickTool(GardenTool tool) {
+    final run = _run;
+    final offer = _toolOffer;
+    if (run == null || offer == null || !offer.contains(tool)) return;
+    _run = run.take(tool);
+    _toolOffer = null;
+    _startNextStage();
+    _showFeedback('${tool.label}: ${tool.blurb}.');
+  }
+
+  void _startNextStage() {
     _runBankedMs += _clock.elapsedMilliseconds;
     _loadStage();
   }
@@ -608,6 +664,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// Going to a regular or daily board (or restarting) ends the run now.
   void _leaveRun() {
+    _toolOffer = null;
     if (_run == null) return;
     _finalizeRun(showSummary: false);
     _run = null;
@@ -618,6 +675,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     final run = _run;
     if (run == null || _runFinalized) return;
     _runFinalized = true;
+    _toolOffer = null;
     _advanceTimer?.cancel();
     _advanceTimer = null;
     final reached = _stageDone ? run.stage - 1 : run.stage;
@@ -725,21 +783,38 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         ? _field.chord(index)
         : _field.reveal(index);
     if (outcome == RevealOutcome.none) return;
-    if (!_runStarted) {
+    final firstDig = !_runStarted;
+    if (firstDig) {
       _runStarted = true;
       if (_run != null) _runParticipated = true;
       _startTimer();
     }
     _onboardingDug = true;
     _moves++;
+    if (firstDig && (_run?.cans ?? 0) > 0) _useCan();
     _afterReveal(index, before);
+  }
+
+  /// Watering can: digs the safest tile and the safe tiles around it, one tile
+  /// at a time (no cascade).
+  void _useCan() {
+    final center = _field.hintCandidate();
+    if (center == null || _over) return;
+    _run = _run!.useCan();
+    for (final cell in [center, ..._field.neighbors(center)]) {
+      _field.revealTile(cell);
+    }
   }
 
   void _afterReveal(int origin, List<bool> before) {
     final run = _run;
     final blasts = run == null ? const <int>[] : _field.lastBlasts.toList();
+    var cloverSaved = 0;
     if (run != null && blasts.isNotEmpty) {
-      _run = run.loseHearts(blasts.length);
+      cloverSaved = math.min(_run!.clovers, blasts.length);
+      _run = _run!
+          .useClovers(cloverSaved)
+          .loseHearts(blasts.length - cloverSaved);
       if (_run!.isOver) _field.exhaust();
     }
     _sound.play(
@@ -773,7 +848,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       for (final blast in blasts) {
         _fx.blast(blast, const []);
       }
-      if (run != null && blasts.isNotEmpty) {
+      if (run != null && blasts.isNotEmpty && run.hearts > _run!.hearts) {
         _fx.heartLoss(
           blasts.last,
           left: _run!.hearts,
@@ -800,7 +875,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       if (_lost) {
         _finalizeRun(showSummary: true);
       } else if (blasts.isNotEmpty) {
-        _showFeedback('A mole! You lost a heart (${_run!.hearts} left).');
+        _showFeedback(
+          cloverSaved >= blasts.length
+              ? 'Lucky clover! The mole cost no heart.'
+              : 'A mole! You lost a heart (${_run!.hearts} left).',
+        );
       }
     } else if (_over) {
       _finishRun();
@@ -1139,6 +1218,15 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 onSelectTheme: _selectTheme,
                 onPlayDaily: _startDaily,
                 onClose: _closeGarden,
+              ),
+            ),
+          if (_toolOffer != null && _run != null)
+            Positioned.fill(
+              child: ToolPickerOverlay(
+                palette: palette,
+                tools: _toolOffer!,
+                stage: _run!.stage - 1,
+                onPick: _pickTool,
               ),
             ),
           if (_tutorialOpen)

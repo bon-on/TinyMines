@@ -1,4 +1,5 @@
 import '../../fair_easy_field.dart';
+import 'garden_tools.dart';
 
 /// Size and mine count of one Garden Run stage.
 class GardenStage {
@@ -92,6 +93,8 @@ class GardenRunState {
     this.hearts = GardenRun.startHearts,
     this.hints = GardenRun.startHints,
     this.cleared = 0,
+    this.clovers = 0,
+    this.cans = 0,
   });
 
   /// The stage being played (or the next one once a clear is recorded).
@@ -102,18 +105,53 @@ class GardenRunState {
   /// Boards cleared in this run.
   final int cleared;
 
+  /// Stored garden tools (feature-garden-tools).
+  final int clovers;
+  final int cans;
+
   bool get isOver => hearts <= 0;
   bool get canHint => hints > 0;
   GardenStage get config => GardenRun.stage(stage);
 
-  GardenRunState _with({int? stage, int? hearts, int? hints, int? cleared}) {
+  GardenRunState _with({
+    int? stage,
+    int? hearts,
+    int? hints,
+    int? cleared,
+    int? clovers,
+    int? cans,
+  }) {
     return GardenRunState(
       stage: stage ?? this.stage,
       hearts: hearts ?? this.hearts,
       hints: hints ?? this.hints,
       cleared: cleared ?? this.cleared,
+      clovers: clovers ?? this.clovers,
+      cans: cans ?? this.cans,
     );
   }
+
+  /// Takes a picked [tool]. An ineligible pick changes nothing.
+  GardenRunState take(GardenTool tool) {
+    if (!GardenTools.eligible(tool, this)) return this;
+    return switch (tool) {
+      GardenTool.sunflower => _with(hearts: hearts + 1),
+      GardenTool.lantern => _with(
+        hints: (hints + GardenTools.lanternHints).clamp(
+          0,
+          GardenTools.maxHints,
+        ),
+      ),
+      GardenTool.clover => _with(clovers: clovers + 1),
+      GardenTool.can => _with(cans: cans + 1),
+    };
+  }
+
+  /// [count] clovers absorbed moles (never below zero).
+  GardenRunState useClovers(int count) =>
+      _with(clovers: (clovers - count).clamp(0, clovers));
+
+  GardenRunState useCan() => cans > 0 ? _with(cans: cans - 1) : this;
 
   /// [count] mines were dug.
   GardenRunState loseHearts([int count = 1]) {

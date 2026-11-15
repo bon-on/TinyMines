@@ -135,6 +135,17 @@ class MineField {
     return _reveal(index);
   }
 
+  /// Opens exactly one safe, unflagged tile without cascading through empty
+  /// tiles. Returns false when the tile is a mole, flagged, revealed or the
+  /// board is not in play.
+  bool revealTile(int index) {
+    if (!_armed || lost || won) return false;
+    final cell = cells[index];
+    if (cell.mine || cell.flagged || cell.revealed) return false;
+    cell.revealed = true;
+    return true;
+  }
+
   /// Ends a [survivable] board as lost: every mine is uncovered.
   void exhaust() {
     if (_exhausted) return;
