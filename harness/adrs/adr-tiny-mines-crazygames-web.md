@@ -17,6 +17,8 @@ related_specs:
   - feature-garden-collection
   - feature-game-feel-polish
   - feature-expert-garden
+  - feature-garden-tools
+  - feature-large-screen-scale
 ---
 
 # ADR: Build flag and platform adapter for CrazyGames

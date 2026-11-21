@@ -7,6 +7,7 @@ related_specs:
   - feature-short-viewport-layout
   - feature-next-goal-share
   - feature-game-feel-polish
+  - feature-large-screen-scale
 evidence_files:
   - docs/gamepix.md
   - reports/tiny-mines-gamepix-verification.md

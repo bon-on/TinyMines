@@ -12,6 +12,8 @@ related_specs:
   - feature-next-goal-share
   - feature-garden-collection
   - feature-game-feel-polish
+  - feature-expert-garden
+  - feature-garden-tools
 evidence_files:
   - reports/tiny-mines-gameplay-verification.md
 ---

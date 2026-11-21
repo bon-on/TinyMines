@@ -4,6 +4,10 @@ title: Make feature specs and ADRs the top AI source of truth
 status: accepted
 related_specs:
   - feature-harness-apply
+  - feature-expert-garden
+  - feature-garden-tools
+  - feature-how-to-play-tutorial
+  - feature-tiny-mines-gameplay
 ---
 
 # ADR: Make feature specs and ADRs the top AI source of truth
