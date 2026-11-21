@@ -14,6 +14,7 @@ related_specs:
   - feature-game-feel-polish
   - feature-expert-garden
   - feature-garden-tools
+  - feature-garden-run-resume
 evidence_files:
   - reports/tiny-mines-gameplay-verification.md
 ---

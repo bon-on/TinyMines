@@ -55,6 +55,10 @@ class DailyChallenge {
     return (field, start);
   }
 
+  /// Time from [now] until the next daily board (the next local midnight).
+  static Duration untilNextDay(DateTime now) =>
+      DateTime(now.year, now.month, now.day + 1).difference(now);
+
   /// Day before [date] (calendar arithmetic, DST safe).
   static DateTime previousDay(DateTime date) =>
       DateTime(date.year, date.month, date.day - 1);

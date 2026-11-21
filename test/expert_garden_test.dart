@@ -131,25 +131,30 @@ void main() {
       expect(mines(), mines());
     });
 
-    test('when the draws run out the last layout is returned unverified', () {
-      // Find a seed whose first draw is not guess-free (about 4 in 5).
-      for (var seed = 0; seed < 50; seed++) {
-        final layout = FairField.generate(
-          size: 14,
-          mineCount: 40,
-          start: 90,
-          random: math.Random(seed),
-          attempts: 1,
-        );
-        if (layout.verified) continue;
+    test('verified fallback covers every Expert opening', () {
+      final logic = MineLogic(14, 40);
+      for (var start = 0; start < 14 * 14; start++) {
+        FairLayout? fallback;
+        for (var seed = 0; seed < 50; seed++) {
+          final layout = FairField.generate(
+            size: 14,
+            mineCount: 40,
+            start: start,
+            random: math.Random(seed),
+            attempts: 1,
+          );
+          if (layout.usedFallback) {
+            fallback = layout;
+            break;
+          }
+        }
+        expect(fallback, isNotNull, reason: 'opening $start');
+        final layout = fallback!;
+        expect(layout.verified, isTrue);
         expect(layout.attempts, 1);
         expect(layout.mines.toSet(), hasLength(40));
-        expect(layout.mines, isNot(contains(90)));
-        final logic = MineLogic(14, 40);
-        expect(layout.mines.any(logic.neighbors(90).contains), isFalse);
-        return;
+        expect(logic.solvable(layout.mines.toSet(), start), isTrue);
       }
-      fail('every first draw was verified, which should be very unlikely');
     });
 
     test('needs at least one draw', () {

@@ -37,7 +37,8 @@ carries through the rest of that run. Tools are automatic (no new buttons), so l
   (keys 1-3, taps); the next stage starts after a pick. If the How to play or Garden card is open
   when the stage ends, the picker opens when that card closes. "Next stage" and the 1.8 s
   auto-advance now open the picker.
-- Out of scope: persistence of tools (run-scoped, never saved), changes to stage table, hearts
+- Run-scoped tools are kept in the active run checkpoint (feature-garden-run-resume).
+- Out of scope: changes to stage table, hearts
   cap, boss rules, XP, records, the daily, Normal/Hard/Expert, board generation.
 
 ## Acceptance Criteria
@@ -50,7 +51,7 @@ carries through the rest of that run. Tools are automatic (no new buttons), so l
   once per charge, after the first dig of a stage (a Hint used as the stage's first move keeps the
   charge for the next stage); it can win the stage; it never digs a mole.
 - Leaving the run, restarting it or losing discards tools and closes the picker.
-- Run XP, `bestRunStage`, `runsPlayed`, plots and the stage table are unchanged; no new saved field.
+- Run XP, `bestRunStage`, `runsPlayed`, plots and the stage table are unchanged.
 - 1280x720, 1366x768 and 390x844 layouts have no overflow with the picker open.
 
 ## Plan / check mapping
@@ -59,6 +60,11 @@ carries through the rest of that run. Tools are automatic (no new buttons), so l
 | Tool rules and offers | `lib/src/game/garden_tools.dart`, `garden_run.dart` | `test/garden_tools_test.dart` |
 | Picker overlay | `lib/src/ui/tool_picker.dart` | `test/garden_tools_screen_test.dart` |
 | Run flow, clover, can | `lib/main.dart` | `test/garden_tools_screen_test.dart` |
+
+## Constraints
+
+Save tool charges only in their active run checkpoint. A finished run never
+carries its tools into a new run.
 
 ## Evidence
 `flutter analyze`, `flutter test`, `flutter build web --release --base-href /TinyMines/`, review.

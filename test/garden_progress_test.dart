@@ -17,6 +17,33 @@ RunResult _win(Difficulty d, int seconds, {String? day}) => RunResult(
 );
 
 void main() {
+  test('an invalid active Garden Run preserves the surrounding progress', () {
+    final progress = GardenProgress.fromJson({
+      'totalXp': 110,
+      'runsPlayed': 3,
+      'bestRunStage': 5,
+      'activeGardenRun': {
+        'version': 1,
+        'stage': 2,
+        'hearts': 3,
+        'hints': 3,
+        'clovers': 0,
+        'cans': 0,
+        'bankedMs': 3000,
+        'stageMs': 0,
+        'moves': 0,
+        'heals': 0,
+        'flagMode': false,
+        'offer': [],
+        'board': '.' * 35,
+      },
+    });
+    expect(progress.runCheckpoint, isNull);
+    expect(progress.totalXp, 110);
+    expect(progress.runsPlayed, 3);
+    expect(progress.bestRunStage, 5);
+  });
+
   group('levels and xp', () {
     test('level curve and theme unlock levels', () {
       expect(GardenProgress.xpToAdvance(1), 100);

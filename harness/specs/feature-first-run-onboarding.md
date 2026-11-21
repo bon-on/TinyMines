@@ -48,6 +48,8 @@ is one button among many and nothing points a new player to it.
    (not daily) board win while `runsPlayed == 0` (so from the first such win on), the result card shows the same call to
    action as a button. None of these
    block board input. Once a run has been played the entry returns to the regular card with the best stage.
+   The shipped app now launches such a player straight into Garden Run stage 1 (`feature-run-first-launch`), so the call
+   to action shows at launch only when that switch does not apply (a Classic dig before progress loaded).
 5. The board taps made while the flag read is pending are still remembered and applied once it answers (it no longer opens a
    card that would discard them).
 

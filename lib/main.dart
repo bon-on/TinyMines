@@ -13,6 +13,7 @@ import 'src/art/garden_scenery.dart';
 import 'src/audio/sound_fx.dart';
 import 'src/game/difficulty.dart';
 import 'src/game/garden_run.dart';
+import 'src/game/garden_run_checkpoint.dart';
 import 'src/game/garden_tools.dart';
 import 'src/meta/daily_challenge.dart';
 import 'src/meta/garden_plots.dart';
@@ -84,12 +85,16 @@ class TinyMinesApp extends StatelessWidget {
     super.key,
     this.platform = const NoopGamePlatform(),
     this.soundFx,
+    this.launchIntoRun = true,
   });
 
   final GamePlatform platform;
 
   /// Injectable sound effects; tests pass a recording one.
   final SoundFx? soundFx;
+
+  /// See [TinyMinesScreen.launchIntoRun]; on for the shipped game.
+  final bool launchIntoRun;
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +110,11 @@ class TinyMinesApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: TinyMinesScreen(platform: platform, soundFx: soundFx),
+      home: TinyMinesScreen(
+        platform: platform,
+        soundFx: soundFx,
+        launchIntoRun: launchIntoRun,
+      ),
     );
   }
 }
@@ -134,7 +143,14 @@ class TinyMinesScreen extends StatefulWidget {
     this.resultCopier = const ResultCopier(),
     this.gardenTools = true,
     this.toolRandom,
+    this.launchIntoRun = false,
   });
+
+  /// Once progress has loaded, replace the untouched Classic launch board by
+  /// the saved Garden Run, or by a first run for a player who never played
+  /// one (feature-run-first-launch). Off here so plain board tests keep their
+  /// Classic launch; [TinyMinesApp] turns it on.
+  final bool launchIntoRun;
 
   /// Garden Run offers a tool after each cleared stage (feature-garden-tools);
   /// tests of the plain stage flow turn it off.
@@ -180,7 +196,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   // only repaints the clock.
   late final Stopwatch _clock = widget.stopwatch ?? Stopwatch();
   int _hintPenalty = 0;
-  int get _elapsedSeconds => _clock.elapsedMilliseconds ~/ 1000 + _hintPenalty;
+  int _stageBankedMs = 0;
+  int get _stageElapsedMs => _stageBankedMs + _clock.elapsedMilliseconds;
+  int get _elapsedSeconds => _stageElapsedMs ~/ 1000 + _hintPenalty;
   int _hints = 3;
   Timer? _timer;
   bool _tutorialOpen = false;
@@ -206,6 +224,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// The player made a move on this board (the clock runs from then).
   bool _runStarted = false;
 
+  /// The Classic board shown at launch is still untouched (no other board,
+  /// flag or mode switch), so the launch may swap it for a Garden Run.
+  bool _launchBoard = false;
+
   /// Daily board in play: its day key; null for a regular board.
   String? _dailyDay;
   bool _dailyPractice = false;
@@ -229,6 +251,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// Tools on offer between stages (feature-garden-tools), or null.
   List<GardenTool>? _toolOffer;
+  List<GardenTool> _stageReward = const [];
 
   /// The cleared stage was a boss that restored a heart.
   bool _healedOnClear = false;
@@ -242,6 +265,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   (int, bool)? _pendingTap;
 
   GardenProgress _progress = const GardenProgress.initial();
+  Future<void> _saveQueue = Future<void>.value();
   bool _progressLoaded = false;
   // Runs finished (or themes picked) before the stored progress loaded; they
   // are merged into it once it arrives so nothing is overwritten.
@@ -262,7 +286,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   /// The portal sees a Garden Run as one play session: a cleared stage does
   /// not stop gameplay, only the end of the run does.
   bool get _portalOver => _run != null ? _lost : _over;
-  int get _runSeconds => (_runBankedMs + _clock.elapsedMilliseconds) ~/ 1000;
+  int get _runSeconds => (_runBankedMs + _stageElapsedMs) ~/ 1000;
   int get _hintsLeft => _run?.hints ?? _hints;
   double get _gap => _field.size > 10 ? 3 : 4;
   GardenPalette get _palette => GardenPalette.of(_progress.selectedTheme);
@@ -281,6 +305,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     widget.platform.setAudioMuteListener(_sound.refreshMute);
     _sound.startMusic();
     _restart();
+    _launchBoard = true;
     unawaited(_loadProgress());
     _checkFirstRun();
   }
@@ -305,12 +330,30 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _progressLoaded = true;
     });
     if (dirty) unawaited(_saveProgress());
+    _launchIntoRun();
   }
 
-  Future<void> _saveProgress() async {
-    try {
-      await widget.progressStore.save(_progress);
-    } catch (_) {}
+  /// feature-run-first-launch: resume the saved Garden Run, or start a first
+  /// one, in place of the untouched launch board. Nothing of that board was
+  /// recorded, and the portal session continues without a stop/start pair.
+  void _launchIntoRun() {
+    if (!widget.launchIntoRun || !_launchBoard) return;
+    _launchBoard = false;
+    if (_run != null || _runStarted || _field.armed || _report != null) return;
+    if (_pendingTap != null || _overlayOpen) return;
+    if (_progress.runCheckpoint == null && _progress.runsPlayed > 0) return;
+    _resumeOrStartGardenRun();
+  }
+
+  Future<void> _saveProgress() {
+    final progress = _progress;
+    final store = widget.progressStore;
+    _saveQueue = _saveQueue.then((_) async {
+      try {
+        await store.save(progress);
+      } catch (_) {}
+    });
+    return _saveQueue;
   }
 
   bool _onHardwareKey(KeyEvent event) {
@@ -335,6 +378,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _onboarding = !seen && session == _tutorialSession && !_tutorialOpen;
     });
     _syncGameplay();
+    // A run resumed before the check answered starts its clock now.
+    _resumeClock();
     _applyPendingTap();
   }
 
@@ -426,7 +471,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _resumeClock() {
-    if (_appActive && _runStarted && !_over && !_overlayOpen) _startTimer();
+    if (_appActive &&
+        _tutorialChecked &&
+        _runStarted &&
+        !_over &&
+        !_overlayOpen) {
+      _startTimer();
+    }
   }
 
   void _onLifecycleChanged(AppLifecycleState state) {
@@ -438,6 +489,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _resumeClock();
     } else {
       _stopTimer();
+      _checkpointRun();
     }
     _syncGameplay();
   }
@@ -462,8 +514,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _resetRunState() {
+    _launchBoard = false;
     _stopTimer();
     _clock.reset();
+    _stageBankedMs = 0;
     _hintPenalty = 0;
     _moves = 0;
     _flagMode = false;
@@ -472,6 +526,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _hitIndex = null;
     _stageDone = false;
     _toolOffer = null;
+    _stageReward = const [];
     _advanceTimer?.cancel();
     _advanceTimer = null;
     _report = null;
@@ -548,7 +603,23 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _loadStage();
   }
 
-  void _loadStage() {
+  void _resumeOrStartGardenRun() {
+    final checkpoint = _progress.runCheckpoint;
+    if (checkpoint == null) {
+      _startGardenRun();
+      return;
+    }
+    _dailyDay = null;
+    _dailyPractice = false;
+    _run = checkpoint.run;
+    _runFinalized = false;
+    _runParticipated = true;
+    _runHeals = checkpoint.heals;
+    _runBankedMs = checkpoint.bankedMs;
+    _loadStage(checkpoint: checkpoint);
+  }
+
+  void _loadStage({GardenRunCheckpoint? checkpoint}) {
     final run = _run!;
     final config = run.config;
     _resetRunState();
@@ -559,10 +630,46 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       requireLogicalSolution: config.fairStart,
       survivable: true,
     );
-    _fx.banner(_stageBanner(run.stage, run));
-    if (_stageBannerPlot(run.stage) != null) _sound.play(Sfx.newBest);
+    if (checkpoint == null) {
+      _fx.banner(_stageBanner(run.stage, run));
+      if (_stageBannerPlot(run.stage) != null) _sound.play(Sfx.newBest);
+    } else {
+      checkpoint.restoreBoard(_field);
+      _stageBankedMs = checkpoint.stageMs;
+      _moves = checkpoint.moves;
+      _flagMode = checkpoint.flagMode;
+      _runStarted = _field.armed;
+      if (checkpoint.offer.isNotEmpty) {
+        _stageReward = checkpoint.offer;
+        _toolOffer = _stageReward;
+        _stageDone = true;
+      }
+      _resumeClock();
+    }
     setState(() {});
     _syncGameplay();
+  }
+
+  void _checkpointRun() {
+    final run = _run;
+    if (run == null || _runFinalized || !_runParticipated) return;
+    final stage = run.config;
+    final checkpoint = GardenRunCheckpoint(
+      run: run,
+      bankedMs: _runBankedMs + (_stageDone ? _stageElapsedMs : 0),
+      stageMs: _stageDone ? 0 : _stageElapsedMs,
+      heals: _runHeals,
+      moves: _stageDone ? 0 : _moves,
+      flagMode: !_stageDone && _flagMode,
+      board: !_stageDone
+          ? _field.encodeGardenBoard()
+          : _stageReward.isEmpty
+          ? '.' * (stage.size * stage.size)
+          : null,
+      offer: _stageDone ? _stageReward : const [],
+    );
+    _progress = _progress.withRunCheckpoint(checkpoint);
+    unawaited(_saveProgress());
   }
 
   /// The Run Path plot that reaching [stage] earns for the first time.
@@ -625,9 +732,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (_tutorialOpen || _gardenOpen) return;
     _advanceTimer?.cancel();
     _advanceTimer = null;
-    final offer = widget.gardenTools
-        ? GardenTools.offer(run, widget.toolRandom ?? math.Random())
-        : const <GardenTool>[];
+    final offer = _stageReward;
     if (offer.isEmpty) {
       _startNextStage();
       return;
@@ -647,8 +752,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _startNextStage() {
-    _runBankedMs += _clock.elapsedMilliseconds;
+    _runBankedMs += _stageElapsedMs;
     _loadStage();
+    _checkpointRun();
   }
 
   void _stageCleared() {
@@ -657,6 +763,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _healedOnClear = _run!.hearts > before;
     if (_healedOnClear) _runHeals++;
     _stageDone = true;
+    _stageReward = widget.gardenTools
+        ? GardenTools.offer(_run!, widget.toolRandom ?? math.Random())
+        : const [];
+    _checkpointRun();
     final cleared = _run!.stage - 1;
     _fx.banner(
       GardenRun.isBoss(cleared)
@@ -700,7 +810,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       ),
     );
     if (!identical(_progress, outcome.progress)) {
-      _progress = outcome.progress;
+      _progress = outcome.progress.withRunCheckpoint(null);
       unawaited(_saveProgress());
     }
     if (!showSummary) return;
@@ -887,12 +997,15 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (run != null) {
       if (_lost) {
         _finalizeRun(showSummary: true);
-      } else if (blasts.isNotEmpty) {
-        _showFeedback(
-          cloverSaved >= blasts.length
-              ? 'Lucky clover! The mole cost no heart.'
-              : 'A mole! You lost a heart (${_run!.hearts} left).',
-        );
+      } else {
+        if (!_stageDone) _checkpointRun();
+        if (blasts.isNotEmpty) {
+          _showFeedback(
+            cloverSaved >= blasts.length
+                ? 'Lucky clover! The mole cost no heart.'
+                : 'A mole! You lost a heart (${_run!.hearts} left).',
+          );
+        }
       }
     } else if (_over) {
       _finishRun();
@@ -982,8 +1095,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     }
     if (!_appActive || _overlayOpen || _summaryOpen) return;
     if (!_field.toggleFlag(index)) return;
+    _launchBoard = false;
     _clearFeedback();
     if (_field.cells[index].flagged) _onboardingFlagged = true;
+    _checkpointRun();
     _sound.play(Sfx.flag);
     _fx.flag(index, planted: _field.cells[index].flagged);
     setState(() {});
@@ -1106,8 +1221,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   void _setFlagMode(bool flag) {
     if (_flagMode == flag) return;
+    _launchBoard = false;
     _clearFeedback();
     setState(() => _flagMode = flag);
+    _checkpointRun();
   }
 
   Widget _modeButton(GardenPalette palette, bool flag, {double height = 40}) {
@@ -1202,6 +1319,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
                 shareLink: _shareLink,
+                now: _today,
                 copier: widget.resultCopier,
                 onTryGardenRun:
                     !report.garden &&
@@ -1209,7 +1327,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                         report.won &&
                         _progressLoaded &&
                         _progress.runsPlayed == 0
-                    ? _startGardenRun
+                    ? _resumeOrStartGardenRun
                     : null,
                 nextLabel: report.garden ? 'Classic board' : null,
                 onNext: report.garden
@@ -1653,10 +1771,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       width: double.infinity,
       child: GardenButton(
         palette: palette,
-        label: best > 0 ? 'Garden Run - best $best' : 'Garden Run',
+        label:
+            resumeRunLabel(_progress) ??
+            (best > 0 ? 'Garden Run - best $best' : 'Garden Run'),
         icon: Icons.favorite_rounded,
         height: height,
-        onPressed: _progressLoaded ? _startGardenRun : null,
+        onPressed: _progressLoaded ? _resumeOrStartGardenRun : null,
       ),
     );
   }
@@ -1891,7 +2011,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// Garden Run is promoted until the first run has been played.
   bool get _promoteRun =>
-      _progressLoaded && _run == null && _progress.runsPlayed == 0;
+      _progressLoaded &&
+      _run == null &&
+      _progress.runCheckpoint == null &&
+      _progress.runsPlayed == 0;
 
   /// Narrow screens: the Garden Run entry button, or its live status.
   Widget _runStrip(GardenPalette palette) {
@@ -1907,12 +2030,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       final best = _progress.bestRunStage;
       return GardenButton(
         palette: palette,
-        label: best > 0
-            ? 'Garden Run - best stage $best'
-            : 'Garden Run - ${GardenRun.startHearts} hearts',
+        label:
+            resumeRunLabel(_progress) ??
+            (best > 0
+                ? 'Garden Run - best stage $best'
+                : 'Garden Run - ${GardenRun.startHearts} hearts'),
         icon: Icons.favorite_rounded,
         height: 44,
-        onPressed: _progressLoaded ? _startGardenRun : null,
+        onPressed: _progressLoaded ? _resumeOrStartGardenRun : null,
       );
     }
     return SizedBox(
@@ -2088,7 +2213,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     palette: palette,
                     progress: _progress,
                     playing: _run != null,
-                    onStart: _progressLoaded ? _startGardenRun : null,
+                    onStart: !_progressLoaded
+                        ? null
+                        : _run == null
+                        ? _resumeOrStartGardenRun
+                        : _startGardenRun,
                   ),
                 ),
               const SizedBox(height: 12),

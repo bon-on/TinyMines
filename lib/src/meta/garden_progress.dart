@@ -1,5 +1,6 @@
 import '../game/difficulty.dart';
 import '../game/garden_run.dart';
+import '../game/garden_run_checkpoint.dart';
 import 'daily_challenge.dart';
 import 'garden_plots.dart';
 import 'garden_theme.dart';
@@ -130,6 +131,7 @@ class GardenProgress {
     this.bestRunStage = 0,
     this.dailyClears = 0,
     this.rewardedSets = const <String>{},
+    this.runCheckpoint,
   });
 
   const GardenProgress.initial()
@@ -145,7 +147,8 @@ class GardenProgress {
       runsPlayed = 0,
       bestRunStage = 0,
       dailyClears = 0,
-      rewardedSets = const <String>{};
+      rewardedSets = const <String>{},
+      runCheckpoint = null;
 
   static const int dailyPlayXp = 15;
   static const int dailyWinXp = 40;
@@ -179,6 +182,13 @@ class GardenProgress {
 
   /// Ids of plot sets ([PlotSet.id]) whose bonus was already paid.
   final Set<String> rewardedSets;
+
+  final GardenRunCheckpoint? runCheckpoint;
+
+  GardenProgress withRunCheckpoint(GardenRunCheckpoint? checkpoint) => _copy(
+    runCheckpoint: checkpoint,
+    clearRunCheckpoint: checkpoint == null,
+  );
 
   List<GardenPlot> get earnedPlots =>
       GardenPlots.earned(bestRunStage: bestRunStage, dailyClears: dailyClears);
@@ -458,6 +468,7 @@ class GardenProgress {
     'bestRunStage': bestRunStage,
     'dailyClears': dailyClears,
     'rewardedSets': rewardedSets.toList()..sort(),
+    if (runCheckpoint != null) 'activeGardenRun': runCheckpoint!.toJson(),
   };
 
   /// Tolerant parser: every missing or invalid field falls back on its own.
@@ -525,6 +536,7 @@ class GardenProgress {
       bestRunStage: readInt(json['bestRunStage']),
       dailyClears: storedClears > wonDailies ? storedClears : wonDailies,
       rewardedSets: Set.unmodifiable(rewarded),
+      runCheckpoint: GardenRunCheckpoint.fromJson(json['activeGardenRun']),
     );
     final theme = json['selectedTheme'];
     return progress.withTheme(
@@ -546,6 +558,8 @@ class GardenProgress {
     int? bestRunStage,
     int? dailyClears,
     Set<String>? rewardedSets,
+    GardenRunCheckpoint? runCheckpoint,
+    bool clearRunCheckpoint = false,
   }) {
     return GardenProgress(
       bestTimes: Map.unmodifiable(bestTimes ?? this.bestTimes),
@@ -561,6 +575,9 @@ class GardenProgress {
       bestRunStage: bestRunStage ?? this.bestRunStage,
       dailyClears: dailyClears ?? this.dailyClears,
       rewardedSets: Set.unmodifiable(rewardedSets ?? this.rewardedSets),
+      runCheckpoint: clearRunCheckpoint
+          ? null
+          : runCheckpoint ?? this.runCheckpoint,
     );
   }
 }

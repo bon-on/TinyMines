@@ -15,7 +15,7 @@ Solver success on random boards (VM, 300 boards per size, random first cell):
 6x6/5 81%, 9x9/12 68%, 12x12/26 40%, 14x14/34 44%, 14x14/38 27%, 14x14/40 21%, 16x16/44 46%, 16x16/48 29%. One solve costs about 0.1 ms on the VM.
 14x14/40 was chosen: the highest density that still tiles at about 25 px on a 390 px phone and still generates fast.
 
-Expert generation in the Chrome (dart2js) test, 40 boards: 15.3 ms per board on average, worst 81 ms, 4.9 draws on average, all verified. Success rate implies the 400-draw bound is practically unreachable; if it ever were, the last layout is used and `guessFreeVerified` is false (not shown to the player).
+Expert generation in the Chrome (dart2js) test, 40 boards: 15.3 ms per board on average, worst 81 ms, 4.9 draws on average, all verified. At this revision exceeding the draw limit returned an unverified layout. See the follow-up below for the current fallback.
 
 ## Checks run
 | Check | Result |
@@ -35,3 +35,14 @@ Expert generation in the Chrome (dart2js) test, 40 boards: 15.3 ms per board on 
 
 ## Review follow-up
 Independent review (approve with comments, no Critical/High; the solver was judged sound and the guess-free claim truthful) led to: rejecting `attempts < 1` in `FairField.generate`, a real unverified-fallback test (the old one used zero attempts and returned no moles), a progress test for an Expert win and its save round trip, a stricter Records row test, a doc comment fix and removal of dead code. Open questions kept: Expert records are dropped if an older client re-saves the cloud save (rollback risk), and about 17 px tiles on an 844x390 window are small for touch. Not re-reviewed after these fixes.
+
+## Verified fallback follow-up
+
+Expert now rechecks a catalog layout if random generation reaches the draw
+limit. An independent JavaScript check read the three layouts from the Dart
+source and verified all 196 first digs, applying the same reflections and
+transposition as the application. Each selected board had 40 moles, a safe
+first neighborhood, and required moves after the opening. Visible-clue
+deductions finished each one. The Flutter regression exercises the catalog
+through the real generator with the draw budget reduced to one. Flutter was
+unavailable in the environment for this follow-up.

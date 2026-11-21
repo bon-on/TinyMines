@@ -11,6 +11,14 @@ import '../meta/garden_progress.dart';
 import '../meta/garden_theme.dart';
 import 'garden_ui.dart';
 
+/// "Resume Garden Run - stage 4, 2 hearts" for a saved run, else null.
+String? resumeRunLabel(GardenProgress progress) {
+  final run = progress.runCheckpoint?.run;
+  if (run == null) return null;
+  final hearts = run.hearts == 1 ? '1 heart' : '${run.hearts} hearts';
+  return 'Resume Garden Run - stage ${run.stage}, $hearts';
+}
+
 /// Level badge, XP bar and the XP needed for the next level.
 class LevelCard extends StatelessWidget {
   const LevelCard({super.key, required this.palette, required this.progress});
@@ -301,7 +309,9 @@ class GardenRunCard extends StatelessWidget {
         const SizedBox(height: 8),
         GardenButton(
           palette: palette,
-          label: playing ? 'Restart run' : 'Start Garden Run',
+          label: playing
+              ? 'Restart run'
+              : resumeRunLabel(progress) ?? 'Start Garden Run',
           icon: playing ? Icons.refresh_rounded : Icons.play_arrow_rounded,
           height: 44,
           onPressed: onStart,

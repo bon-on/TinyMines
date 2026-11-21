@@ -60,6 +60,7 @@ Future<void> _pump(
   GardenProgressStore? store,
   GamePlatform? platform,
   SoundFx? soundFx,
+  FakeStopwatch? stopwatch,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -70,7 +71,7 @@ Future<void> _pump(
         random: math.Random(1),
         progressStore: store ?? MemoryGardenProgressStore(),
         tutorialStore: _Seen(),
-        stopwatch: FakeStopwatch(),
+        stopwatch: stopwatch ?? FakeStopwatch(),
         now: () => DateTime(2026, 11, 2, 9),
         platform: platform ?? const NoopGamePlatform(),
         soundFx: soundFx,
@@ -159,6 +160,40 @@ void main() {
     expect(find.text('Run 0:00'), findsOneWidget);
   });
 
+  testWidgets('reopening restores the board and running clock', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    final store = MemoryGardenProgressStore();
+    final clock = FakeStopwatch();
+    await _pump(tester, store: store, stopwatch: clock);
+    await _startRun(tester);
+    final field = _Garden().stage(1, 12);
+    await _tap(tester, 12);
+    clock.advance(7000);
+    await _tap(tester, _moles(field).first);
+    final snapshot = store.value.runCheckpoint!;
+    await tester.pumpWidget(const SizedBox());
+
+    final reopened = MemoryGardenProgressStore(
+      GardenProgress.fromJson(store.value.toJson()),
+    );
+    await _pump(tester, store: reopened);
+    await tester.tap(find.text('Resume Garden Run - stage 1, 2 hearts'));
+    await tester.pumpAndSettle();
+    expect(_hudStage(1), findsOneWidget);
+    expect(_fullHearts, findsNWidgets(2));
+    expect(find.text('Run 0:07'), findsOneWidget);
+    expect(find.bySemanticsLabel('Mole'), findsOneWidget);
+    expect(reopened.value.runCheckpoint!.board, snapshot.board);
+    await tester.tap(find.text('Easy 6x6'));
+    await tester.pumpAndSettle();
+    expect(reopened.value.runCheckpoint, isNull);
+    expect(reopened.value.runsPlayed, 1);
+    expect(reopened.value.totalXp, 10);
+  });
+
   testWidgets('a dug mole costs a heart, shows a mole and play continues', (
     tester,
   ) async {
@@ -188,7 +223,8 @@ void main() {
     // Digging the exploded mole again does nothing.
     await _tap(tester, mole);
     expect(_fullHearts, findsNWidgets(2));
-    expect(store.saveCount, 0);
+    expect(store.value.runCheckpoint?.run.hearts, 2);
+    expect(store.value.runsPlayed, 0);
   });
 
   testWidgets('the last heart ends the run: summary, XP once, records only', (
@@ -223,7 +259,8 @@ void main() {
     expect(saved.plays, isEmpty);
     expect(saved.daily, isEmpty);
     expect(saved.streak, 0);
-    expect(store.saveCount, 1);
+    expect(saved.runCheckpoint, isNull);
+    final savesAfterSettlement = store.saveCount;
 
     // Closing the card and leaving the run must not pay out a second time.
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -234,7 +271,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.value.totalXp, 10);
     expect(store.value.runsPlayed, 1);
-    expect(store.saveCount, 1);
+    expect(store.saveCount, savesAfterSettlement);
     expect(platform.events, ['start', 'stop', 'start']);
   });
 
@@ -270,9 +307,10 @@ void main() {
     expect(_bannerText('Stage 1 cleared!'), findsOneWidget);
     expect(find.text('Next stage'), findsOneWidget);
     expect(_tiles, findsNWidgets(25));
-    // Gameplay is not stopped between stages and nothing is saved yet.
+    // Gameplay continues between stages, and the active stage is saved.
     expect(platform.events, ['start']);
-    expect(store.saveCount, 0);
+    expect(store.value.runCheckpoint?.run.stage, 2);
+    expect(store.value.runsPlayed, 0);
 
     await tester.pump(const Duration(milliseconds: 2000));
     await tester.pumpAndSettle();
@@ -290,7 +328,7 @@ void main() {
     expect(store.value.bestRunStage, 2);
     expect(store.value.plays, isEmpty);
     expect(store.value.bestTimes, isEmpty);
-    expect(store.saveCount, 1);
+    expect(store.value.runCheckpoint, isNull);
     expect(platform.events, ['start']);
   });
 
@@ -384,7 +422,8 @@ void main() {
           loseHeart ? findsNWidgets(2) : findsNothing,
         );
         expect(_fullHearts, findsNWidgets(3));
-        expect(store.saveCount, 0);
+        expect(store.value.runCheckpoint?.run.stage, 6);
+        expect(store.value.runsPlayed, 0);
       },
     );
   }

@@ -123,6 +123,7 @@ class _ToolCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: '${tool.label}: ${tool.blurb}',
+      onTap: onTap,
       excludeSemantics: true,
       child: Material(
         color: palette.accent.withValues(alpha: 0.18),

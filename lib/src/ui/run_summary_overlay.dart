@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../art/garden_palette.dart';
 import '../art/garden_tile_art.dart';
 import '../game/difficulty.dart';
+import '../meta/daily_challenge.dart';
 import '../meta/garden_plots.dart';
 import '../meta/garden_progress.dart';
 import '../meta/next_goal.dart';
@@ -84,6 +85,7 @@ class RunSummaryOverlay extends StatefulWidget {
     this.shareLink,
     this.copier = const ResultCopier(),
     this.delay = const Duration(milliseconds: 750),
+    this.now,
   });
 
   final RunReport report;
@@ -108,6 +110,10 @@ class RunSummaryOverlay extends StatefulWidget {
   final String? shareLink;
   final ResultCopier copier;
   final Duration delay;
+
+  /// Current time for the daily line (time to the next daily, streak state);
+  /// null shows only a just-recorded streak.
+  final DateTime? now;
 
   @override
   State<RunSummaryOverlay> createState() => _RunSummaryOverlayState();
@@ -154,6 +160,15 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
   void initState() {
     super.initState();
     _controller.addListener(_checkShown);
+  }
+
+  /// The primary button takes keyboard focus once the card is built (it is
+  /// not in the tree during the delay), so Enter/Space start the next play.
+  bool _focusRequested = false;
+
+  void _focusPrimary() {
+    if (_focusRequested) return;
+    _focusRequested = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _playAgainFocus.requestFocus();
     });
@@ -219,6 +234,7 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
         animation: _controller,
         builder: (context, _) {
           final appear = _phase(0, 0.2, Curves.easeOutBack);
+          if (_phase(0, 0.01) > 0) _focusPrimary();
           return Stack(
             children: [
               ModalBarrier(
@@ -499,11 +515,14 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                 textColor: palette.onAccent,
               ),
             ),
-        if (outcome.dailyRecorded) ...[
+        if (_dailyLine(outcome) case final line?) ...[
           const SizedBox(height: 10),
           Text(
-            'Daily streak: ${outcome.streak} day${outcome.streak == 1 ? '' : 's'}. Come back tomorrow!',
+            line,
+            key: const ValueKey('daily-hook'),
             textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -516,6 +535,25 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
         const SizedBox(height: 14),
       ],
     );
+  }
+
+  /// Reason to come back tomorrow (feature-run-first-launch): the streak a
+  /// daily just extended, or today's daily state, with the time to the next.
+  String? _dailyLine(RunOutcome outcome) {
+    final now = widget.now;
+    // A daily finished after midnight counts for its own day; today's daily
+    // is then already open, so the plain hook applies.
+    final day = widget.report.dailyDay;
+    final today =
+        now == null || day == null || day == DailyChallenge.dayKey(now);
+    if (outcome.dailyRecorded && today) {
+      final streak = outcome.streak;
+      final days = 'Daily streak: $streak day${streak == 1 ? '' : 's'}.';
+      return now == null
+          ? '$days Come back tomorrow!'
+          : '$days New daily in ${untilNextDaily(now)}.';
+    }
+    return now == null ? null : dailyHook(outcome.progress, now);
   }
 
   Widget _actions(GardenPalette palette, {required bool short}) {

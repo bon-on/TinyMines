@@ -1,3 +1,4 @@
+import 'daily_challenge.dart';
 import 'garden_plots.dart';
 import 'garden_progress.dart';
 import 'garden_theme.dart';
@@ -59,18 +60,23 @@ NextGoal? plotGoal(GardenProgress progress) {
   final plot = progress.nextPlot;
   if (plot == null) return null;
   final earned = progress.earnedPlots.length;
+  final remaining = plot.remaining(
+    bestRunStage: progress.bestRunStage,
+    dailyClears: progress.dailyClears,
+  );
+  // After a first run, a Run Path goal counts the stages still missing past
+  // the best one (feature-run-first-launch).
+  final step = plot.isRunPlot && progress.bestRunStage > 0
+      ? 'Reach stage ${plot.requirement} - '
+            '$remaining more stage${remaining == 1 ? '' : 's'}'
+      : plot.goalText(dailyClears: progress.dailyClears);
   return NextGoal(
     kind: GoalKind.plot,
     title: 'Earn the ${plot.label} plot',
-    detail:
-        '${plot.goalText(dailyClears: progress.dailyClears)} - '
-        '$earned/${GardenPlots.total} plots',
+    detail: '$step - $earned/${GardenPlots.total} plots',
     current: earned,
     target: GardenPlots.total,
-    estimate: plot.remaining(
-      bestRunStage: progress.bestRunStage,
-      dailyClears: progress.dailyClears,
-    ),
+    estimate: remaining,
     runStage: plot.isRunPlot ? plot.requirement : null,
   );
 }
@@ -148,4 +154,28 @@ List<NextGoal> nextGoals(GardenProgress progress, {int limit = 3}) {
     return byEstimate != 0 ? byEstimate : a.kind.index.compareTo(b.kind.index);
   });
   return goals.take(limit).toList();
+}
+
+/// "5h 12m" (or "12m" under an hour) until the next daily board, rounded up
+/// to whole minutes.
+String untilNextDaily(DateTime now) {
+  final left = DailyChallenge.untilNextDay(now);
+  final minutes = (left.inSeconds + 59) ~/ 60;
+  final hours = minutes ~/ 60;
+  return hours > 0 ? '${hours}h ${minutes % 60}m' : '${minutes}m';
+}
+
+/// Result card line (feature-run-first-launch): today's daily state and
+/// streak, plus the time until the next daily board.
+String dailyHook(GardenProgress progress, DateTime now) {
+  final left = untilNextDaily(now);
+  final streak = progress.currentStreak(now);
+  if (progress.dailyResult(now) != null) {
+    return streak > 0
+        ? 'Daily done - $streak-day streak. New daily in $left.'
+        : 'Daily done. New daily in $left.';
+  }
+  return streak > 0
+      ? "Play today's daily to keep your $streak-day streak ($left left)."
+      : "Today's daily garden is open ($left left).";
 }

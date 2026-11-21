@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:tiny_mines/mine_field.dart';
 import 'package:tiny_mines/platform/game_platform.dart';
 import 'package:tiny_mines/src/game/garden_run.dart';
 import 'package:tiny_mines/src/game/garden_tools.dart';
+import 'package:tiny_mines/src/meta/garden_progress.dart';
 import 'package:tiny_mines/src/meta/garden_progress_store.dart';
 
 class _Seen extends TutorialStore {
@@ -46,6 +48,8 @@ Future<void> _pump(
   WidgetTester tester, {
   required int toolSeed,
   Size size = const Size(800, 1400),
+  MemoryGardenProgressStore? store,
+  bool start = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -55,7 +59,7 @@ Future<void> _pump(
       home: TinyMinesScreen(
         random: math.Random(1),
         toolRandom: math.Random(toolSeed),
-        progressStore: MemoryGardenProgressStore(),
+        progressStore: store ?? MemoryGardenProgressStore(),
         tutorialStore: _Seen(),
         now: () => DateTime(2026, 11, 2, 9),
         platform: const NoopGamePlatform(allowsResultRegistration: false),
@@ -63,6 +67,7 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+  if (!start) return;
   final cta = find.byKey(const ValueKey('garden-run-cta'));
   final wide = find.text('Start Garden Run');
   await tester.tap(
@@ -134,6 +139,58 @@ Future<_Garden> _toPicker(WidgetTester tester) async {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('reopening preserves the offer and the selected tool', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    final store = MemoryGardenProgressStore();
+    await _pump(tester, toolSeed: 3, store: store);
+    await _toPicker(tester);
+    final offer = store.value.runCheckpoint!.offer;
+    expect(offer, hasLength(3));
+
+    await tester.pumpWidget(const SizedBox());
+    final reopened = MemoryGardenProgressStore(
+      GardenProgress.fromJson(store.value.toJson()),
+    );
+    await _pump(tester, toolSeed: 21, store: reopened, start: false);
+    await tester.tap(find.textContaining('Resume Garden Run'));
+    await tester.pumpAndSettle();
+    expect(_picker, findsOneWidget);
+    final clover = find.bySemanticsLabel(
+      '${GardenTool.clover.label}: ${GardenTool.clover.blurb}',
+    );
+    expect(
+      tester.getSemantics(clover).getSemanticsData().hasAction(
+        SemanticsAction.tap,
+      ),
+      isTrue,
+    );
+    expect(reopened.value.runCheckpoint!.offer, offer);
+    await tester.tap(find.byKey(const ValueKey('tool-clover')));
+    await tester.pumpAndSettle();
+    expect(reopened.value.runCheckpoint!.run.clovers, 1);
+    expect(reopened.value.runCheckpoint!.offer, isEmpty);
+    expect(reopened.value.runCheckpoint!.board, '.' * 36);
+
+    await tester.pumpWidget(const SizedBox());
+    final afterPick = MemoryGardenProgressStore(
+      GardenProgress.fromJson(reopened.value.toJson()),
+    );
+    await _pump(tester, toolSeed: 21, store: afterPick, start: false);
+    await tester.tap(find.textContaining('Resume Garden Run'));
+    await tester.pumpAndSettle();
+    expect(_picker, findsNothing);
+    expect(_tiles, findsNWidgets(36));
+    await tester.tap(find.text('Normal 9x9'));
+    await tester.pumpAndSettle();
+    expect(afterPick.value.runCheckpoint, isNull);
+    expect(afterPick.value.runsPlayed, 1);
+    expect(afterPick.value.bestRunStage, 2);
+    expect(afterPick.value.totalXp, 25);
+  });
 
   testWidgets('the picker offers three tools and blocks the board', (
     tester,

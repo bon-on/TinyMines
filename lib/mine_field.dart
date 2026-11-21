@@ -130,6 +130,51 @@ class MineField {
     _armed = true;
   }
 
+  /// Compact active Garden Run board, including flags and spent mole tiles.
+  String encodeGardenBoard() => [
+    for (final cell in cells)
+      if (cell.mine)
+        cell.revealed ? 'b' : (cell.flagged ? 'f' : 'm')
+      else if (cell.revealed)
+        'd'
+      else
+        cell.flagged ? 'x' : '.',
+  ].join();
+
+  /// Restores a checkpoint into a new survivable field.
+  bool restoreGardenBoard(String board) {
+    if (!survivable || _armed || board.length != cells.length) return false;
+    final mines = <int>[];
+    var dug = 0;
+    for (var i = 0; i < board.length; i++) {
+      switch (board[i]) {
+        case 'm':
+        case 'f':
+        case 'b':
+          mines.add(i);
+        case 'd':
+          dug++;
+        case '.':
+        case 'x':
+          break;
+        default:
+          return false;
+      }
+    }
+    if (mines.isEmpty ? dug != 0 : mines.length != mineCount) return false;
+    if (mines.isNotEmpty && (dug == 0 || dug == cells.length - mineCount)) {
+      return false;
+    }
+    if (mines.isNotEmpty) plantMinesAt(mines);
+    for (var i = 0; i < board.length; i++) {
+      final mark = board[i];
+      cells[i].revealed = mark == 'd' || mark == 'b';
+      cells[i].flagged = mark == 'x' || mark == 'f' || mark == 'b';
+      if (mark == 'b') _blasted.add(i);
+    }
+    return true;
+  }
+
   RevealOutcome reveal(int index) {
     _lastBlasts.clear();
     return _reveal(index);

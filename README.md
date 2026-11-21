@@ -22,12 +22,13 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
 - Garden Run: one run over ever bigger boards (5x5 up to 12x12) with 3 hearts.
   A mole costs a heart instead of ending the board, boss gardens (stages 5 and
   10) win a heart back, hints are shared (3, +1 per 3 clears, max 5) and the
-  next stage starts by itself. XP is paid once when the run ends (15 per
+  next stage starts after the tool choice. XP is paid once when the run ends (15 per
   cleared board + 10 for taking part); `runsPlayed` and `bestRunStage` are
   saved in `garden_progress_v1`. Normal records and the daily are untouched.
 - Garden tools (feature-garden-tools): after every cleared Garden Run stage you pick
   one of three tools (tap, or keys 1-3); they work automatically for the rest of the
-  run and are never saved. Sunflower +1 heart, Lantern +2 hints (up to 7), Lucky clover
+  run. Resume Garden Run restores the active board or pending choice and the tools
+  already picked. Sunflower +1 heart, Lantern +2 hints (up to 7), Lucky clover
   (the next mole costs no heart, stacks to 2), Watering can (after your first dig of a
   stage, the safest tile and the safe tiles around it open one by one without cascading; stacks to 2). Stage table, XP and records are unchanged.
 - Garden plots: eight code-drawn plots in two sets. Run Path is earned by

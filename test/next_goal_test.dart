@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tiny_mines/src/game/difficulty.dart';
 import 'package:tiny_mines/src/meta/garden_progress.dart';
 import 'package:tiny_mines/src/meta/next_goal.dart';
 
@@ -58,7 +59,7 @@ void main() {
     expect(goals.where((g) => g.kind == GoalKind.run), isEmpty);
     final plot = goals.firstWhere((g) => g.kind == GoalKind.plot);
     expect(plot.title, 'Earn the Rose arch plot');
-    expect(plot.detail, 'Reach stage 5 in Garden Run - 2/8 plots');
+    expect(plot.detail, 'Reach stage 5 - 1 more stage - 2/8 plots');
     expect(plot.runStage, 5);
     expect(plot.estimate, 1);
   });
@@ -88,5 +89,45 @@ void main() {
     expect(xpToLevel(progress, 2), 100);
     expect(xpToLevel(progress, 3), 240);
     expect(xpToLevel(progress, 6), 900);
+  });
+
+  test('untilNextDaily rounds up to minutes before local midnight', () {
+    expect(untilNextDaily(DateTime(2026, 11, 2, 18, 48)), '5h 12m');
+    expect(untilNextDaily(DateTime(2026, 11, 2, 23, 15)), '45m');
+    expect(untilNextDaily(DateTime(2026, 11, 2, 23, 59, 30)), '1m');
+    expect(untilNextDaily(DateTime(2026, 11, 2)), '24h 0m');
+  });
+
+  test('dailyHook names the daily state and the streak', () {
+    GardenProgress daily(GardenProgress p, String day) => p
+        .applyRun(
+          RunResult(
+            difficulty: Difficulty.normal,
+            won: true,
+            seconds: 60,
+            revealedFraction: 1,
+            dailyDay: day,
+          ),
+        )
+        .progress;
+    final now = DateTime(2026, 11, 2, 9);
+    expect(
+      dailyHook(const GardenProgress.initial(), now),
+      "Today's daily garden is open (15h 0m left).",
+    );
+    final yesterday = daily(const GardenProgress.initial(), '2026-11-01');
+    expect(
+      dailyHook(yesterday, now),
+      "Play today's daily to keep your 1-day streak (15h 0m left).",
+    );
+    expect(
+      dailyHook(daily(yesterday, '2026-11-02'), now),
+      'Daily done - 2-day streak. New daily in 15h 0m.',
+    );
+    // A lapsed streak is not offered as one to keep.
+    expect(
+      dailyHook(yesterday, DateTime(2026, 11, 4, 9)),
+      "Today's daily garden is open (15h 0m left).",
+    );
   });
 }

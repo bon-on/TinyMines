@@ -33,9 +33,9 @@ play. Bigger random boards also force 50:50 guesses, which makes "harder" mean
   numbers, deduced moles, the shown mole total, subset rules and exhaustive
   search per frontier group). Mole layouts are drawn at random (first cell and
   its neighbours safe) until the solver opens every safe cell, with a bounded
-  number of attempts. If the bound is ever reached the last layout is used
-  and a verified flag stays false; with the measured success rate this is not
-  expected to happen (see Evidence).
+  number of attempts. Once the limit is reached, Expert selects a layout from
+  a small catalog covering every first dig by reflection and transposition.
+  The solver verifies the selected fallback before the field is armed.
 - The opt-in is a new `MineField(guessFree: true)` flag. The existing
   `requireLogicalSolution` (Easy 6x6/5 with its verified fallback catalog),
   Normal and Hard boards, Garden Run boards and the dated daily layouts are
