@@ -43,6 +43,8 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   every stage start, stage clear, boss garden and the first time a stage earns
   a plot. Flag mode tints the board frame. All effects are one-shot (no
   looping animation) and never block input.
+- Large screens (feature-large-screen-scale): wide windows bigger than 1280x720 (fullscreen, big monitors) lay the
+  side-panel layout out at 1280x720 and scale it up uniformly, up to 1.6x, so the board and panels fill the screen.
 - Every finished run opens a summary (time, best, New best!, XP, level bar,
   unlocks, new plots) with a Next goal block (next level and theme, Garden
   Run target or the closest plot). Enter plays again, Escape shows the board.

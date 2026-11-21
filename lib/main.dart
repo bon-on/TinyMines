@@ -66,6 +66,19 @@ ScreenLayout screenLayoutFor(Size size) {
 /// Stacked windows shorter than this fold the controls into fewer rows.
 const double shortStackedHeight = 700;
 
+/// Wide windows bigger than this lay the wide layout out at this size and
+/// scale it up (feature-large-screen-scale).
+const Size wideDesignSize = Size(1280, 720);
+
+/// Largest scale of the wide layout.
+const double maxWideScale = 1.6;
+
+/// Uniform scale of the wide layout in a window of [size]: 1 up to
+/// [wideDesignSize], then growing with the smaller ratio, capped.
+double wideScaleFor(Size size) => math
+    .min(size.width / wideDesignSize.width, size.height / wideDesignSize.height)
+    .clamp(1.0, maxWideScale);
+
 class TinyMinesApp extends StatelessWidget {
   const TinyMinesApp({
     super.key,
@@ -1259,7 +1272,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             child: LayoutBuilder(
               builder: (context, box) {
                 return switch (screenLayoutFor(box.biggest)) {
-                  ScreenLayout.wide => _wideLayout(palette, box),
+                  ScreenLayout.wide => _scaledWideLayout(palette, box),
                   ScreenLayout.compact => _compactLayout(palette),
                   ScreenLayout.stacked => _narrowLayout(
                     palette,
@@ -2006,6 +2019,29 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               children: children,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// The wide layout, laid out at the design size and scaled up on large
+  /// windows (feature-large-screen-scale).
+  Widget _scaledWideLayout(GardenPalette palette, BoxConstraints box) {
+    final scale = wideScaleFor(box.biggest);
+    // The same widget structure at every scale, so crossing 1280x720 (going
+    // fullscreen) does not remount the layout.
+    final inner = Size(box.maxWidth / scale, box.maxHeight / scale);
+    // Tight outer box: a FittedBox under loose constraints would stay at the
+    // child's (unscaled) size.
+    return SizedBox(
+      key: const ValueKey('wide-scaled'),
+      width: box.maxWidth,
+      height: box.maxHeight,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox.fromSize(
+          size: inner,
+          child: _wideLayout(palette, BoxConstraints.tight(inner)),
         ),
       ),
     );
