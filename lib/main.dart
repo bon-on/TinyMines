@@ -1340,6 +1340,8 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     ? _resumeOrStartGardenRun
                     : null,
                 nextLabel: report.garden ? 'Classic board' : null,
+                selectedTheme: _progress.selectedTheme,
+                onUseTheme: _selectTheme,
                 onNext: report.garden
                     ? _restart
                     : report.won &&

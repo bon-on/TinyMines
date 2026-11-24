@@ -348,6 +348,24 @@ void main() {
   });
 
   group('themes and daily', () {
+    testWidgets('the result reveal switches and saves a new theme', (
+      tester,
+    ) async {
+      final store = MemoryGardenProgressStore(
+        GardenProgress.fromJson({'totalXp': 95}),
+      );
+      await _pump(tester, store: store, stopwatch: FakeStopwatch());
+      await _winEasy(tester);
+      expect(find.byKey(const ValueKey('theme-reveal')), findsOneWidget);
+      expect(store.value.selectedTheme, GardenTheme.spring);
+      await tester.ensureVisible(find.text('Use Autumn'));
+      await tester.tap(find.text('Use Autumn'));
+      await tester.pumpAndSettle();
+      expect(find.text('Using Autumn'), findsOneWidget);
+      expect(store.value.selectedTheme, GardenTheme.autumn);
+      expect(store.value.totalXp, 125);
+    });
+
     testWidgets('only unlocked themes can be picked; choice is saved', (
       tester,
     ) async {

@@ -1,9 +1,9 @@
 /// Cosmetic garden themes, unlocked by garden level. Themes never change rules.
 enum GardenTheme {
   spring(requiredLevel: 1, label: 'Spring'),
-  autumn(requiredLevel: 3, label: 'Autumn'),
-  winter(requiredLevel: 6, label: 'Winter'),
-  night(requiredLevel: 10, label: 'Night');
+  autumn(requiredLevel: 2, label: 'Autumn'),
+  winter(requiredLevel: 4, label: 'Winter'),
+  night(requiredLevel: 6, label: 'Night');
 
   const GardenTheme({required this.requiredLevel, required this.label});
 

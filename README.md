@@ -15,8 +15,8 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   only uses visible clues must open every safe tile from your first dig, so a
   hard board never needs a 50:50 guess. Easy keeps its own guess-free
   generator; Normal, Hard, Garden Run and the daily are unchanged.
-- Levels unlock cosmetic themes: Spring (Lv1), Autumn (Lv3), Winter (Lv6),
-  Night (Lv10).
+- Levels unlock cosmetic themes: Spring (Lv1), Autumn (Lv2), Winter (Lv4),
+  Night (Lv6).
 - Daily garden: one Normal board per local day, the same for everyone, with a
   starting patch already dug. One result per day; finished days build a streak.
 - Garden Run: one run over ever bigger boards (5x5 up to 12x12) with 3 hearts.

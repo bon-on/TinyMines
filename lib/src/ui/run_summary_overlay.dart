@@ -9,6 +9,7 @@ import '../game/difficulty.dart';
 import '../meta/daily_challenge.dart';
 import '../meta/garden_plots.dart';
 import '../meta/garden_progress.dart';
+import '../meta/garden_theme.dart';
 import '../meta/next_goal.dart';
 import '../share/result_copy.dart';
 import '../share/result_text.dart';
@@ -86,6 +87,8 @@ class RunSummaryOverlay extends StatefulWidget {
     this.copier = const ResultCopier(),
     this.delay = const Duration(milliseconds: 750),
     this.now,
+    this.selectedTheme,
+    this.onUseTheme,
   });
 
   final RunReport report;
@@ -108,6 +111,14 @@ class RunSummaryOverlay extends StatefulWidget {
 
   /// Link appended to the copied result; null copies text only.
   final String? shareLink;
+
+  /// Theme the garden uses now, so the reveal can say "Using ..."
+  /// (feature-theme-reward-reveal).
+  final GardenTheme? selectedTheme;
+
+  /// Switches the garden to a theme this result unlocked; null hides the
+  /// button in the reveal.
+  final ValueChanged<GardenTheme>? onUseTheme;
   final ResultCopier copier;
   final Duration delay;
 
@@ -333,6 +344,12 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
     final shownXp = before + (outcome.xpGained * barT).round();
     final shown = GardenProgress.fromJson({'totalXp': shownXp});
     final textPrimary = palette.textPrimary;
+    final newThemes = outcome.newlyUnlockedThemes;
+    final revealed = newThemes.isEmpty
+        ? null
+        : newThemes.reduce(
+            (a, b) => a.requiredLevel >= b.requiredLevel ? a : b,
+          );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -482,8 +499,23 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
             textColor: palette.onAccent,
           ),
         ],
+        // The highest new theme gets a reveal with a one-tap switch; any
+        // others unlocked by the same result keep the small pill.
+        if (barT >= 1 && revealed != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Transform.scale(
+              scale: 0.7 + 0.3 * _phase(0.75, 0.95, Curves.elasticOut),
+              child: ThemeReveal(
+                palette: palette,
+                theme: revealed,
+                using: (t) => t == widget.selectedTheme,
+                onUse: widget.onUseTheme,
+              ),
+            ),
+          ),
         for (final theme in outcome.newlyUnlockedThemes)
-          if (barT >= 1)
+          if (barT >= 1 && theme != revealed)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: _Pill(
@@ -798,6 +830,112 @@ class _Pill extends StatelessWidget {
           fontSize: 14,
           color: textColor,
         ),
+      ),
+    );
+  }
+}
+
+/// "New theme unlocked" block on the result card: a small preview of the
+/// theme's garden, its name and a button that switches to it at once
+/// (feature-theme-reward-reveal).
+class ThemeReveal extends StatelessWidget {
+  const ThemeReveal({
+    super.key,
+    required this.palette,
+    required this.theme,
+    required this.using,
+    required this.onUse,
+  });
+
+  final GardenPalette palette;
+  final GardenTheme theme;
+  final bool Function(GardenTheme theme) using;
+  final ValueChanged<GardenTheme>? onUse;
+
+  @override
+  Widget build(BuildContext context) {
+    final look = GardenPalette.of(theme);
+    final inUse = using(theme);
+    return Container(
+      key: const ValueKey('theme-reveal'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: palette.panel,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: palette.flowerCenter, width: 2.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 122,
+            height: 72,
+            padding: const EdgeInsets.fromLTRB(6, 22, 6, 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [look.skyTop, look.skyBottom, look.hillNear],
+                stops: const [0, 0.55, 0.56],
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TileArt(palette: look, look: TileLook.covered, size: 34),
+                TileArt(palette: look, look: TileLook.flower, size: 34),
+                TileArt(
+                  palette: look,
+                  look: TileLook.soil,
+                  nearby: 1,
+                  size: 34,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'NEW THEME UNLOCKED',
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w900,
+                    color: palette.textSecondary,
+                  ),
+                ),
+                Text(
+                  theme.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: palette.textPrimary,
+                  ),
+                ),
+                if (onUse != null) ...[
+                  const SizedBox(height: 4),
+                  GardenButton(
+                    key: const ValueKey('use-theme'),
+                    palette: palette,
+                    label: inUse
+                        ? 'Using ${theme.label}'
+                        : 'Use ${theme.label}',
+                    icon: inUse ? Icons.check_rounded : Icons.palette_rounded,
+                    primary: false,
+                    height: 34,
+                    onPressed: inUse ? null : () => onUse!(theme),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

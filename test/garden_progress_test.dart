@@ -92,6 +92,9 @@ void main() {
       p = out.progress;
       out = p.applyRun(_win(Difficulty.normal, 90));
       expect(out.isNewBest, isFalse);
+      // 140 XP: Lv 2 opens the first new theme.
+      expect(out.levelAfter, 2);
+      expect(out.newlyUnlockedThemes, [GardenTheme.autumn]);
       p = out.progress;
       out = p.applyRun(_win(Difficulty.normal, 60));
       expect(out.isNewBest, isTrue);
@@ -105,7 +108,7 @@ void main() {
       out = p.applyRun(_win(Difficulty.easy, 30));
       expect(out.levelAfter, 3);
       expect(out.leveledUp, isTrue);
-      expect(out.newlyUnlockedThemes, [GardenTheme.autumn]);
+      expect(out.newlyUnlockedThemes, isEmpty);
       expect(
         out.progress.withTheme(GardenTheme.autumn).selectedTheme,
         GardenTheme.autumn,
@@ -359,7 +362,7 @@ void main() {
     });
 
     test('level ups and new themes are reported', () {
-      final outcome = GardenProgress.fromJson({'totalXp': 235}).applyGardenRun(
+      final outcome = GardenProgress.fromJson({'totalXp': 95}).applyGardenRun(
         const GardenRunResult(
           stageReached: 2,
           stagesCleared: 1,

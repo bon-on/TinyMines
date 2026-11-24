@@ -100,3 +100,5 @@ platform"으로 거절했다. Tiny Mines도 회색 사각형 타일, Material �
 ## Quality recovery refinement
 
 `feature-crazygames-quality-recovery` supersedes the generation-preservation restriction for regular Easy only: dimensions/mine count and reveal/flag/chord rules are unchanged; Normal/Hard and fixed DailyChallenge layouts are preserved.
+
+> 2026-11-24: the theme unlock levels here are superseded by `feature-theme-reward-reveal` (Autumn Lv2, Winter Lv4, Night Lv6).

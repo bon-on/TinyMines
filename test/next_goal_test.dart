@@ -23,23 +23,23 @@ void main() {
     expect(goals[1].title, 'Earn the Mushroom ring plot');
     expect(goals[1].detail, 'Clear a daily garden - 0/8 plots');
     expect(goals[2].title, 'Reach garden Lv 2');
-    expect(goals[2].detail, '100 XP to go');
+    expect(goals[2].detail, '100 XP to go - unlocks Autumn');
     expect(goals[2].estimate, 2);
     final theme = nextGoals(_p(), limit: 9).last;
-    expect(theme.title, 'Unlock the Autumn theme');
-    expect(theme.detail, 'Lv 3 - 240 XP to go');
+    expect(theme.title, 'Unlock the Winter theme');
+    expect(theme.detail, 'Lv 4 - 420 XP to go');
   });
 
   test('a theme opened by the next level joins the level goal', () {
-    final progress = _p(xp: 100, best: 3);
-    expect(progress.level, 2);
+    final progress = _p(xp: 240, best: 3);
+    expect(progress.level, 3);
     final goals = nextGoals(progress, limit: 5);
     final level = goals.firstWhere((g) => g.kind == GoalKind.level);
-    expect(level.detail, '140 XP to go - unlocks Autumn');
+    expect(level.detail, '180 XP to go - unlocks Winter');
     expect(level.current, 0);
-    expect(level.target, 140);
+    expect(level.target, 180);
     final theme = goals.firstWhere((g) => g.kind == GoalKind.theme);
-    expect(theme.title, 'Unlock the Winter theme');
+    expect(theme.title, 'Unlock the Night theme');
     final run = goals.firstWhere((g) => g.kind == GoalKind.run);
     expect(run.title, 'Beat Garden Run stage 3');
     expect(run.detail, 'Reach stage 4');

@@ -114,8 +114,8 @@ class RunOutcome {
 /// XP per run: a win earns [winXp] for its difficulty (Easy 30, Normal 70,
 /// Hard 150); a mine hit earns a share of it for the dug tiles (at least 3).
 /// A finished daily adds [dailyPlayXp], a cleared one also [dailyWinXp].
-/// Reaching level L+1 costs 100 + 40 * (L - 1) XP, so Autumn (Lv3) needs 240
-/// XP (about 3 Normal clears), Winter (Lv6) 900 and Night (Lv10) 2340.
+/// Reaching level L+1 costs 100 + 40 * (L - 1) XP, so Autumn (Lv2) needs 100
+/// XP (about 3 short Garden Runs), Winter (Lv4) 420 and Night (Lv6) 900.
 class GardenProgress {
   const GardenProgress({
     required this.bestTimes,
