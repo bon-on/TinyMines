@@ -266,10 +266,11 @@ class _RunSummaryOverlayState extends State<RunSummaryOverlay>
                                 child: LayoutBuilder(
                                   builder: (context, box) {
                                     final short = box.maxHeight < 480;
-                                    // Portal preview frames (620x349,
+                                    // Short landscape phones (844x390) and
+                                    // portal preview frames (620x349,
                                     // 560x315): no art, smaller tiles, so
                                     // the XP row shows above the actions.
-                                    final tight = box.maxHeight < 320;
+                                    final tight = box.maxHeight < 380;
                                     return Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [

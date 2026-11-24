@@ -299,7 +299,7 @@ void main() {
       );
     });
 
-    for (final size in const [Size(844, 390), Size(560, 315)]) {
+    for (final size in const [Size(844, 390), Size(932, 430), Size(560, 315)]) {
       testWidgets('the daily line fits a short card at $size', (tester) async {
         await _showCard(
           tester,

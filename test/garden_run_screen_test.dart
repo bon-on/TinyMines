@@ -163,8 +163,6 @@ void main() {
   testWidgets('reopening restores the board and running clock', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     final store = MemoryGardenProgressStore();
     final clock = FakeStopwatch();
     await _pump(tester, store: store, stopwatch: clock);

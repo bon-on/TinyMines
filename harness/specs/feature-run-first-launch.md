@@ -84,3 +84,9 @@ checkpoint and its single settlement stay as in `adr-garden-run-checkpoint`.
 
 - `reports/run-first-launch-verification.md`
 - `flutter analyze`, `flutter test`, `flutter build web`
+
+## Note - 2026-11-24
+
+The result card drops its art and uses small stat tiles whenever the card is shorter than 380 px (was 320 px). That now
+includes landscape phones such as 844x390, where the +XP row had slipped under the pinned actions. 932x430 keeps the full
+card and is checked by the same "daily line fits a short card" test.
