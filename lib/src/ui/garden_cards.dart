@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -264,6 +265,7 @@ class GardenRunCard extends StatelessWidget {
     required this.progress,
     required this.playing,
     required this.onStart,
+    this.runStage,
   });
 
   final GardenPalette palette;
@@ -272,12 +274,22 @@ class GardenRunCard extends StatelessWidget {
   /// A run is on the table right now (the button restarts it).
   final bool playing;
 
+  /// Stage of the run on the table, shown instead of the saved best alone
+  /// (feature-live-run-status).
+  final int? runStage;
+
   /// Null while the saved progress is still loading.
   final VoidCallback? onStart;
 
   @override
   Widget build(BuildContext context) {
     final best = progress.bestRunStage;
+    final stage = playing ? runStage : null;
+    final status = stage != null
+        ? (best > 0 ? 'Stage $stage - best $best' : 'Stage $stage')
+        : best > 0
+        ? 'Best stage $best'
+        : 'No run yet';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -287,12 +299,18 @@ class GardenRunCard extends StatelessWidget {
             Expanded(child: PanelCaption('Garden Run', palette: palette)),
             Icon(Icons.favorite_rounded, size: 16, color: palette.danger),
             const SizedBox(width: 3),
-            Text(
-              best > 0 ? 'Best stage $best' : 'No run yet',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-                color: palette.textPrimary,
+            Flexible(
+              child: Text(
+                status,
+                key: const ValueKey('garden-run-status'),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: palette.textPrimary,
+                ),
               ),
             ),
           ],
@@ -678,15 +696,27 @@ class GardenPlotsCard extends StatelessWidget {
     super.key,
     required this.palette,
     required this.progress,
+    this.runStage = 0,
   });
 
   final GardenPalette palette;
   final GardenProgress progress;
 
+  /// Stage reached by the run on the table (0 without one). Plots it reaches
+  /// show as earned now; the run's end saves them (feature-live-run-status).
+  final int runStage;
+
   @override
   Widget build(BuildContext context) {
-    final earned = progress.earnedPlots.toSet();
-    final next = progress.nextPlot;
+    final reached = max(progress.bestRunStage, runStage);
+    final earned = GardenPlots.earned(
+      bestRunStage: reached,
+      dailyClears: progress.dailyClears,
+    ).toSet();
+    final next = GardenPlots.next(
+      bestRunStage: reached,
+      dailyClears: progress.dailyClears,
+    );
     final dim = TextStyle(
       fontWeight: FontWeight.w700,
       fontSize: 12,
@@ -717,7 +747,7 @@ class GardenPlotsCard extends StatelessWidget {
                 ? '${set.label} - complete'
                 : GardenPlots.isSetComplete(
                     set,
-                    bestRunStage: progress.bestRunStage,
+                    bestRunStage: reached,
                     dailyClears: progress.dailyClears,
                   )
                 ? '${set.label} - +${set.bonusXp} XP on your next result'
@@ -846,11 +876,15 @@ class GardenOverlay extends StatefulWidget {
     required this.onSelectTheme,
     required this.onPlayDaily,
     required this.onClose,
+    this.runStage = 0,
   });
 
   final GardenPalette palette;
   final GardenProgress progress;
   final DateTime today;
+
+  /// Stage reached by the run on the table, for the plots card.
+  final int runStage;
   final bool dailyPlaying;
   final ValueChanged<GardenTheme> onSelectTheme;
   final VoidCallback onPlayDaily;
@@ -961,6 +995,7 @@ class _GardenOverlayState extends State<GardenOverlay> {
                             GardenPlotsCard(
                               palette: palette,
                               progress: widget.progress,
+                              runStage: widget.runStage,
                             ),
                             const SizedBox(height: 14),
                             RecordsCard(

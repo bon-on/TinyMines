@@ -143,8 +143,6 @@ void main() {
   testWidgets('reopening preserves the offer and the selected tool', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     final store = MemoryGardenProgressStore();
     await _pump(tester, toolSeed: 3, store: store);
     await _toPicker(tester);
@@ -163,9 +161,10 @@ void main() {
       '${GardenTool.clover.label}: ${GardenTool.clover.blurb}',
     );
     expect(
-      tester.getSemantics(clover).getSemanticsData().hasAction(
-        SemanticsAction.tap,
-      ),
+      tester
+          .getSemantics(clover)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
       isTrue,
     );
     expect(reopened.value.runCheckpoint!.offer, offer);
@@ -383,6 +382,68 @@ void main() {
     expect(store.value.bestRunStage, 2);
     expect(store.value.runsPlayed, 1);
     expect(store.value.totalXp, 25);
+  });
+
+  group('live run status (feature-live-run-status)', () {
+    String status(WidgetTester tester) => tester
+        .widget<Text>(find.byKey(const ValueKey('garden-run-status')))
+        .data!;
+    Finder plots(int n) => find.descendant(
+      of: find.byKey(const ValueKey('garden-plots')),
+      matching: find.text('$n/8'),
+    );
+
+    testWidgets('panels wait for the next stage to load before moving on', (
+      tester,
+    ) async {
+      final store = MemoryGardenProgressStore();
+      await _pump(
+        tester,
+        toolSeed: _seedOffering(GardenTool.clover),
+        size: const Size(1280, 720),
+        store: store,
+      );
+      expect(status(tester), 'Stage 1');
+      await _toPicker(tester);
+      expect(_picker, findsOneWidget);
+      // Stage 1 is cleared, but stage 2 has not started: no plot yet.
+      expect(status(tester), 'Stage 1');
+      expect(plots(0), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('tool-clover')));
+      await tester.pumpAndSettle();
+      expect(status(tester), 'Stage 2');
+      expect(plots(1), findsOneWidget);
+    });
+
+    testWidgets('a resumed run with a pending offer shows the cleared stage', (
+      tester,
+    ) async {
+      final store = MemoryGardenProgressStore();
+      await _pump(
+        tester,
+        toolSeed: _seedOffering(GardenTool.clover),
+        size: const Size(1280, 720),
+        store: store,
+      );
+      await _toPicker(tester);
+      await tester.pumpWidget(const SizedBox());
+      final reopened = MemoryGardenProgressStore(
+        GardenProgress.fromJson(store.value.toJson()),
+      );
+      await _pump(
+        tester,
+        toolSeed: 21,
+        size: const Size(1280, 720),
+        store: reopened,
+        start: false,
+      );
+      await tester.tap(find.textContaining('Resume Garden Run'));
+      await tester.pumpAndSettle();
+      expect(_picker, findsOneWidget);
+      expect(status(tester), 'Stage 1');
+      expect(plots(0), findsOneWidget);
+    });
   });
 }
 

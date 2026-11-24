@@ -672,6 +672,16 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     unawaited(_saveProgress());
   }
 
+  /// Stage the run on the table has reached (0 without one). After a clear
+  /// the run already points at the next stage, which only counts once it is
+  /// loaded; saving and the side panels share this rule
+  /// (feature-live-run-status).
+  int get _runStageReached {
+    final run = _run;
+    if (run == null) return 0;
+    return _stageDone ? run.stage - 1 : run.stage;
+  }
+
   /// The Run Path plot that reaching [stage] earns for the first time.
   /// Reaching a stage is what counts (feature-garden-collection), so it is
   /// announced as the stage starts; the run's end saves it.
@@ -801,7 +811,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _toolOffer = null;
     _advanceTimer?.cancel();
     _advanceTimer = null;
-    final reached = _stageDone ? run.stage - 1 : run.stage;
+    final reached = _runStageReached;
     final outcome = _progress.applyGardenRun(
       GardenRunResult(
         stageReached: reached,
@@ -1349,6 +1359,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 onSelectTheme: _selectTheme,
                 onPlayDaily: _startDaily,
                 onClose: _closeGarden,
+                runStage: _runStageReached,
               ),
             ),
           if (_toolOffer != null && _run != null)
@@ -2213,6 +2224,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     palette: palette,
                     progress: _progress,
                     playing: _run != null,
+                    runStage: _run == null ? null : _runStageReached,
                     onStart: !_progressLoaded
                         ? null
                         : _run == null
@@ -2373,7 +2385,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               GardenPanel(
                 palette: palette,
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: GardenPlotsCard(palette: palette, progress: _progress),
+                child: GardenPlotsCard(
+                  palette: palette,
+                  progress: _progress,
+                  runStage: _runStageReached,
+                ),
               ),
               const SizedBox(height: 12),
               GardenPanel(
