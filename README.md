@@ -53,6 +53,11 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   long-press flag lands (with a short vibration where supported), and in Flag
   mode a tap on a number still chords. Garden Run hearts show once, above the
   board.
+- Phone layout (feature-board-first-phone-layout): portrait screens put the
+  level, Garden Run, Daily and Garden in one row above the board and Dig/Flag
+  (and zoom) below it, within thumb reach. When the board would be narrower
+  than 90% of the screen, the layout folds further (Dig/Flag icons beside the
+  difficulty), so the board fills the width on most phones.
 - Every finished run opens a summary (time, best, New best!, XP, level bar,
   unlocks, new plots) with a Next goal block (next level and theme, Garden
   Run target or the closest plot). Enter plays again, Escape shows the board.

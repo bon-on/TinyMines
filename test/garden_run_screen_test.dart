@@ -178,7 +178,7 @@ void main() {
       GardenProgress.fromJson(store.value.toJson()),
     );
     await _pump(tester, store: reopened);
-    await tester.tap(find.text('Resume Garden Run - stage 1, 2 hearts'));
+    await tester.tap(find.text('Resume Garden Run - stage 1'));
     await tester.pumpAndSettle();
     expect(_hudStage(1), findsOneWidget);
     expect(_fullHearts, findsNWidgets(2));

@@ -176,8 +176,12 @@ void main() {
         await tester.tap(find.text('View board'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        if (find.text('Garden').evaluate().isNotEmpty) {
-          await tester.tap(find.text('Garden'));
+        // Stacked phones show Garden as an icon button.
+        final garden = find.text('Garden').evaluate().isNotEmpty
+            ? find.text('Garden')
+            : find.byTooltip('Garden');
+        if (garden.evaluate().isNotEmpty) {
+          await tester.tap(garden);
           await tester.pumpAndSettle();
           expect(find.text('My Garden'), findsOneWidget);
           expect(tester.takeException(), isNull);
@@ -331,7 +335,7 @@ void main() {
     await tester.tap(_tiles.at(0));
     await tester.pump();
     expect(watch.isRunning, isTrue);
-    await tester.tap(find.text('Garden'));
+    await tester.tap(find.byTooltip('Garden'));
     await tester.pumpAndSettle();
     expect(find.text('My Garden'), findsOneWidget);
     expect(watch.isRunning, isFalse);

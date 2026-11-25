@@ -57,7 +57,9 @@ Layout selection (`screenLayoutFor` in `lib/main.dart`)
   ("Hard") with the full title ("Hard 12x12") as tooltip and semantics
   label; no XP footer; the compact tip strip takes the status line's place
   while it is shown (feedback and the end of a board still show the status).
-  Taller stacked windows (390x844) keep the existing arrangement.
+  Taller stacked windows (390x844) keep the existing arrangement. (Superseded 2026-11-25 by
+  `feature-board-first-phone-layout`: every stacked window uses the meta row, Dig/Flag sit below the board, and tall
+  windows fold too when their board would be under 90% of the width.)
 - Icon buttons smaller than 44 px use their visual size as the tap target
   (`MaterialTapTargetSize.shrinkWrap`); 44 px and larger keep the padded
   48 px target.

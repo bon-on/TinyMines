@@ -133,7 +133,7 @@ void main() {
       final wide = size.width >= 760 && size.width / size.height >= 1.25;
       if (!wide) {
         expect(find.byKey(const ValueKey('garden-plots')), findsNothing);
-        await tester.tap(find.text('Garden'));
+        await tester.tap(find.byTooltip('Garden'));
         await tester.pumpAndSettle();
       }
       expect(find.byKey(const ValueKey('garden-plots')), findsOneWidget);

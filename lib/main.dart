@@ -67,6 +67,10 @@ ScreenLayout screenLayoutFor(Size size) {
 /// Stacked windows shorter than this fold the controls into fewer rows.
 const double shortStackedHeight = 700;
 
+/// Stacked windows fold when the unfolded board side would be smaller than
+/// this share of the available width (feature-board-first-phone-layout).
+const double foldBoardShare = 0.9;
+
 /// Wide windows bigger than this lay the wide layout out at this size and
 /// scale it up (feature-large-screen-scale).
 const Size wideDesignSize = Size(1280, 720);
@@ -220,6 +224,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   final GlobalKey _zoomViewerKey = GlobalKey();
   bool _zoomable = false;
   bool _zoomed = false;
+
+  /// Height the unfolded stacked layout spends around the board, measured
+  /// once per state that changes it ([_chromeKey]). It predicts the fold for
+  /// any window height, so resizing does not first draw the unfolded layout.
+  final Map<String, double> _unfoldedChrome = {};
 
   /// Last dug or flagged cell; zooming in centres it.
   int? _lastCell;
@@ -1470,10 +1479,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 return switch (screenLayoutFor(box.biggest)) {
                   ScreenLayout.wide => _scaledWideLayout(palette, box),
                   ScreenLayout.compact => _compactLayout(palette),
-                  ScreenLayout.stacked => _narrowLayout(
-                    palette,
-                    short: box.maxHeight < shortStackedHeight,
-                  ),
+                  ScreenLayout.stacked => _narrowLayout(palette, box),
                 };
               },
             ),
@@ -1566,7 +1572,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     ('Best', _bestText),
   ];
 
-  Widget _board(GardenPalette palette) {
+  /// The board, sized to the box left for it. [onMeasure] gets the box and
+  /// returns true to ask for a rebuild of the layout around it (stacked fold).
+  Widget _board(
+    GardenPalette palette, {
+    bool Function(BoxConstraints box)? onMeasure,
+  }) {
     return LayoutBuilder(
       builder: (context, box) {
         final run = _run;
@@ -1576,6 +1587,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           580.0,
           math.min(box.maxWidth, math.max(0.0, box.maxHeight - rowHeight)),
         );
+        if (onMeasure != null && onMeasure(box)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
+        }
         // Frame, its border and the bed padding around the grid.
         final inner =
             dimension - 2 * (GardenBoard.frameFor(dimension) + 3 + _gap);
@@ -1677,22 +1693,37 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
-  /// Stacked layout. [short] windows (under [shortStackedHeight]) put the
-  /// Garden Run entry, Daily and Garden in one row and Dig/Flag (as icon
-  /// toggles) beside the difficulty, and drop the XP footer, so the board
-  /// keeps most of the height.
-  Widget _narrowLayout(GardenPalette palette, {bool short = false}) {
+  /// Stacked layout for portrait and square windows (feature-board-first-
+  /// phone-layout). Top: title and tools, stats, the level / Garden Run /
+  /// Daily / Garden row and (unfolded) the difficulty picker. Then the board,
+  /// and below it, in thumb reach, Dig / Flag / zoom and the status line.
+  /// The layout folds (Dig/Flag/zoom icons beside a short-label difficulty
+  /// picker, tips in the status line's place) on windows under
+  /// [shortStackedHeight] and whenever the unfolded board came out under
+  /// [foldBoardShare] of the width.
+  Widget _narrowLayout(GardenPalette palette, BoxConstraints box) {
+    // The board side the unfolded layout should reach before it folds.
+    final target = math.min(box.maxWidth, 560) - 24;
+    final key = _chromeKey(box.maxWidth);
+    final rowHeight = _run == null ? 0.0 : RunHeartsRow.height;
+    bool tooSmall(double chrome) =>
+        math.min(target, box.maxHeight - chrome - rowHeight) <
+        target * foldBoardShare;
+    final chrome = _unfoldedChrome[key];
+    final fold =
+        box.maxHeight < shortStackedHeight ||
+        (chrome != null && tooSmall(chrome));
     final tools = _toolButtons(palette);
-    // On short windows the tips take the status line's place (feedback and
+    // Folded windows show the tips in the status line's place (feedback and
     // the end of a board still show it), as on short wide screens.
     final tipsForStatus =
-        short && _onboarding && _boardFeedback == null && !_over;
-    final gap = short ? 6.0 : 8.0;
+        fold && _onboarding && _boardFeedback == null && !_over;
+    final gap = fold ? 6.0 : 8.0;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Padding(
-          padding: EdgeInsets.fromLTRB(12, short ? 6 : 8, 12, short ? 8 : 10),
+          padding: EdgeInsets.fromLTRB(12, fold ? 6 : 8, 12, fold ? 8 : 10),
           child: Column(
             children: [
               _gate(
@@ -1729,55 +1760,61 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 ),
               ),
               SizedBox(height: gap),
-              if (short) ...[
-                _gate(_shortMetaRow(palette)),
+              _gate(_metaRow(palette, fold: fold)),
+              if (!fold) ...[
                 SizedBox(height: gap),
-                _gate(
-                  Row(
-                    children: [
-                      // With the zoom toggle the three icons shrink a
-                      // little, so the difficulty names stay readable.
-                      _modeIcon(palette, false, size: _zoomable ? 38 : 42),
-                      SizedBox(width: _zoomable ? 4 : 6),
-                      _modeIcon(palette, true, size: _zoomable ? 38 : 42),
-                      if (_zoomable) ...[
-                        const SizedBox(width: 4),
-                        _zoomToggle(palette, size: 38),
-                      ],
-                      const SizedBox(width: 8),
-                      // Names only ("Hard"), so the labels stay readable
-                      // beside the toggles; the size is the semantics label.
-                      Expanded(
-                        child: _difficultyPicker(palette, shortLabels: true),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else ...[
                 _gate(_difficultyPicker(palette)),
-                const SizedBox(height: 8),
-                _gate(_runStrip(palette)),
-                const SizedBox(height: 8),
-                _gate(_modeControls(palette)),
               ],
-              SizedBox(height: short ? 4 : 6),
+              SizedBox(height: fold ? 4 : 6),
               if (_onboarding) ...[
-                _tipStrip(palette, compact: short),
+                _tipStrip(palette, compact: true),
                 const SizedBox(height: 6),
               ],
-              Expanded(child: _board(palette)),
+              Expanded(
+                child: _board(
+                  palette,
+                  // Unfolded: record what the rows around the board cost and
+                  // fold if the board came out too small.
+                  onMeasure: fold
+                      ? null
+                      : (board) {
+                          final cost = box.maxHeight - board.maxHeight;
+                          _unfoldedChrome[key] = cost;
+                          return tooSmall(cost);
+                        },
+                ),
+              ),
+              SizedBox(height: gap),
+              _gate(fold ? _foldedControls(palette) : _modeControls(palette)),
               if (!tipsForStatus) ...[
                 SizedBox(height: gap),
                 _statusArea(palette),
-              ],
-              if (!short) ...[
-                const SizedBox(height: 8),
-                _gate(_narrowFooter(palette)),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Folded stacked windows: Dig, Flag (and zoom) as icons beside the
+  /// difficulty picker with short names. With the zoom toggle the icons
+  /// shrink a little, so the difficulty names stay readable.
+  Widget _foldedControls(GardenPalette palette) {
+    final icon = _zoomable ? 38.0 : 42.0;
+    return Row(
+      children: [
+        _modeIcon(palette, false, size: icon),
+        SizedBox(width: _zoomable ? 4 : 6),
+        _modeIcon(palette, true, size: icon),
+        if (_zoomable) ...[
+          const SizedBox(width: 4),
+          _zoomToggle(palette, size: icon),
+        ],
+        const SizedBox(width: 8),
+        // Names only ("Hard"); the size is the semantics label.
+        Expanded(child: _difficultyPicker(palette, shortLabels: true)),
+      ],
     );
   }
 
@@ -1823,14 +1860,21 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     );
   }
 
+  /// What changes the height of the rows around the stacked board: the tip
+  /// strip, the hearts row, the end-of-board button and the width (wrapping).
+  String _chromeKey(double width) =>
+      '${_onboarding ? 't' : '-'}${_run != null ? 'r' : '-'}'
+      '${_over && !_summaryOpen ? 'e' : '-'}${width.round()}';
+
   bool get _dailyDone => _progress.dailyResult(_today) != null;
 
   VoidCallback? get _dailyAction =>
       !_progressLoaded || (_dailyDay != null && !_over) ? null : _startDaily;
 
-  /// Short stacked windows: level, Garden Run entry (or live status), Daily
-  /// and Garden in one row.
-  Widget _shortMetaRow(GardenPalette palette) {
+  /// Stacked windows: level, Garden Run entry (or live status), Daily and
+  /// Garden in one row. [fold] picks the two-line run status and short
+  /// labels.
+  Widget _metaRow(GardenPalette palette, {required bool fold}) {
     final run = _run;
     return SizedBox(
       height: 50,
@@ -1846,9 +1890,14 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                     palette: palette,
                     radius: 25,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Center(child: _compactRunHud(palette, run)),
+                    // Unfolded rows have room for the one-line status.
+                    child: Center(
+                      child: fold
+                          ? _compactRunHud(palette, run)
+                          : _runHud(palette, run),
+                    ),
                   )
-                : Center(child: _runEntry(palette, height: 44)),
+                : Center(child: _runEntry(palette, height: 44, long: !fold)),
           ),
           const SizedBox(width: 6),
           GardenIconButton(
@@ -1873,7 +1922,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// The Garden Run entry while no run is playing: the call to action until
   /// the first run, then a plain button.
-  Widget _runEntry(GardenPalette palette, {double height = 44}) {
+  Widget _runEntry(
+    GardenPalette palette, {
+    double height = 44,
+    bool long = false,
+  }) {
     if (_promoteRun) {
       return GardenRunCta(
         palette: palette,
@@ -1887,8 +1940,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       child: GardenButton(
         palette: palette,
         label:
-            resumeRunLabel(_progress) ??
-            (best > 0 ? 'Garden Run - best $best' : 'Garden Run'),
+            resumeRunLabel(_progress, withHearts: false) ??
+            (best > 0
+                ? 'Garden Run - best ${long ? 'stage ' : ''}$best'
+                : long
+                ? 'Garden Run - ${GardenRun.startHearts} hearts'
+                : 'Garden Run'),
         icon: Icons.favorite_rounded,
         height: height,
         onPressed: _progressLoaded ? _resumeOrStartGardenRun : null,
@@ -2144,111 +2201,11 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _progress.runCheckpoint == null &&
       _progress.runsPlayed == 0;
 
-  /// Narrow screens: the Garden Run entry button, or its live status.
-  Widget _runStrip(GardenPalette palette) {
-    final run = _run;
-    if (_promoteRun) {
-      return GardenRunCta(
-        palette: palette,
-        compact: true,
-        onStart: _startGardenRun,
-      );
-    }
-    if (run == null) {
-      final best = _progress.bestRunStage;
-      return GardenButton(
-        palette: palette,
-        label:
-            resumeRunLabel(_progress) ??
-            (best > 0
-                ? 'Garden Run - best stage $best'
-                : 'Garden Run - ${GardenRun.startHearts} hearts'),
-        icon: Icons.favorite_rounded,
-        height: 44,
-        onPressed: _progressLoaded ? _resumeOrStartGardenRun : null,
-      );
-    }
-    return SizedBox(
-      height: 52,
-      child: GardenPanel(
-        palette: palette,
-        radius: 26,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Center(child: _runHud(palette, run)),
-      ),
-    );
-  }
-
   Widget _runHud(GardenPalette palette, GardenRunState run) {
     return GardenRunHud(
       palette: palette,
       stage: GardenRun.stage(_stageDone ? run.stage - 1 : run.stage),
       runSeconds: _runSeconds,
-    );
-  }
-
-  Widget _narrowFooter(GardenPalette palette) {
-    final dailyDone = _progress.dailyResult(_today) != null;
-    return GardenPanel(
-      palette: palette,
-      radius: 16,
-      padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
-      child: Row(
-        children: [
-          LevelBadge(palette: palette, level: _progress.level, size: 38),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${_progress.xpIntoLevel} / ${_progress.xpForNextLevel} XP',
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: palette.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                GardenProgressBar(
-                  palette: palette,
-                  value: _progress.xpIntoLevel / _progress.xpForNextLevel,
-                  height: 8,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            flex: 2,
-            child: GardenButton(
-              palette: palette,
-              label: dailyDone ? 'Practice daily' : 'Daily',
-              icon: dailyDone
-                  ? Icons.check_rounded
-                  : Icons.calendar_today_rounded,
-              height: 40,
-              onPressed: !_progressLoaded || (_dailyDay != null && !_over)
-                  ? null
-                  : _startDaily,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            flex: 2,
-            child: GardenButton(
-              palette: palette,
-              label: 'Garden',
-              icon: Icons.local_florist_rounded,
-              primary: false,
-              height: 40,
-              onPressed: _openGarden,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -197,14 +197,16 @@ void main() {
       final snapshot = store.value.runCheckpoint!;
       await tester.pumpWidget(const SizedBox());
 
-      // Without the launch switch the entry names stage and hearts.
+      // Without the launch switch the entry names the stage (the phone
+      // meta row drops the hearts; the full label keeps them).
       final labelled = MemoryGardenProgressStore(
         GardenProgress.fromJson(store.value.toJson()),
       );
       await _launch(tester, store: labelled, launchIntoRun: false);
+      expect(find.text('Resume Garden Run - stage 1'), findsOneWidget);
       expect(
-        find.text('Resume Garden Run - stage 1, 3 hearts'),
-        findsOneWidget,
+        resumeRunLabel(labelled.value),
+        'Resume Garden Run - stage 1, 3 hearts',
       );
       await tester.pumpWidget(const SizedBox());
 

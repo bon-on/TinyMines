@@ -13,9 +13,11 @@ import '../meta/garden_theme.dart';
 import 'garden_ui.dart';
 
 /// "Resume Garden Run - stage 4, 2 hearts" for a saved run, else null.
-String? resumeRunLabel(GardenProgress progress) {
+/// [withHearts] false gives the shorter label for slim rows (phones).
+String? resumeRunLabel(GardenProgress progress, {bool withHearts = true}) {
   final run = progress.runCheckpoint?.run;
   if (run == null) return null;
+  if (!withHearts) return 'Resume Garden Run - stage ${run.stage}';
   final hearts = run.hearts == 1 ? '1 heart' : '${run.hearts} hearts';
   return 'Resume Garden Run - stage ${run.stage}, $hearts';
 }
@@ -395,6 +397,7 @@ class GardenRunCta extends StatelessWidget {
             maxLines: 1,
             style: TextStyle(
               fontSize: compact ? 16 : 18,
+              height: compact ? 1.1 : null,
               fontWeight: FontWeight.w900,
               color: white,
             ),
@@ -404,10 +407,11 @@ class GardenRunCta extends StatelessWidget {
           subtitle,
           maxLines: compact ? 1 : 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
+            height: compact ? 1.1 : null,
             fontWeight: FontWeight.w800,
-            color: Color(0xE6FFFFFF),
+            color: const Color(0xE6FFFFFF),
           ),
         ),
         if (!compact) ...[
@@ -466,7 +470,9 @@ class GardenRunCta extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: compact ? 5 : 12,
+                  // The one-row variant fits its two tight lines in a
+                  // slim row.
+                  vertical: compact ? 2 : 12,
                 ),
                 // Narrow side columns drop the play disc to keep the title.
                 child: LayoutBuilder(
