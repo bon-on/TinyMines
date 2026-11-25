@@ -50,7 +50,7 @@ Finder get _bigHearts => find.descendant(
 );
 
 Finder get _fullHearts => find.descendant(
-  of: find.byKey(const ValueKey('run-hearts')),
+  of: find.byKey(const ValueKey('board-hearts')),
   matching: find.byIcon(Icons.favorite_rounded),
 );
 

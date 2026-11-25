@@ -214,6 +214,15 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   bool _gameplayActive = false;
   bool _appActive = true;
   bool _flagMode = false;
+
+  /// Board zoom (feature-mobile-touch-zoom): view only, never saved.
+  final TransformationController _zoom = TransformationController();
+  final GlobalKey _zoomViewerKey = GlobalKey();
+  bool _zoomable = false;
+  bool _zoomed = false;
+
+  /// Last dug or flagged cell; zooming in centres it.
+  int? _lastCell;
   String? _boardFeedback;
   Timer? _feedbackTimer;
   late final SoundFx _sound =
@@ -304,6 +313,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     widget.platform.setAudioMuteListener(_sound.refreshMute);
     _sound.startMusic();
+    _zoom.addListener(_onZoomChanged);
     _restart();
     _launchBoard = true;
     unawaited(_loadProgress());
@@ -510,6 +520,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _feedbackTimer?.cancel();
     _advanceTimer?.cancel();
     _fx.dispose();
+    _zoom.dispose();
     super.dispose();
   }
 
@@ -533,6 +544,44 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _offerRegistrationFor = null;
     _summaryOpen = false;
     _fx.clear();
+    _lastCell = null;
+    _resetZoom();
+  }
+
+  void _onZoomChanged() {
+    final zoomed = _zoom.value.getMaxScaleOnAxis() > 1.01;
+    if (zoomed != _zoomed && mounted) setState(() => _zoomed = zoomed);
+  }
+
+  void _resetZoom() {
+    _zoomed = false;
+    if (_zoom.value.getMaxScaleOnAxis() != 1 ||
+        _zoom.value.getTranslation().length2 != 0) {
+      _zoom.value = Matrix4.identity();
+    }
+  }
+
+  /// Zoom in to about 44 px cells around the last dug or flagged patch (the
+  /// board centre before the first move), or back out to 1x.
+  void _toggleZoom() {
+    if (_zoomed) {
+      _resetZoom();
+      setState(() {});
+      return;
+    }
+    final size = _zoomViewerKey.currentContext?.size;
+    if (size == null || size.isEmpty) return;
+    final n = _field.size;
+    final cell = boardCellSide(size.width, n, _gap);
+    final scale = (44 / cell).clamp(1.6, maxBoardZoom);
+    final last = _lastCell;
+    final focus = last == null
+        ? size.center(Offset.zero)
+        : Offset(
+            (last % n) * (cell + _gap) + cell / 2,
+            (last ~/ n) * (cell + _gap) + cell / 2,
+          );
+    _zoom.value = boardZoomMatrix(size, scale, focus);
   }
 
   /// New regular board at the current difficulty (leaves the daily board).
@@ -888,14 +937,17 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       return;
     }
     if (!_appActive || _overlayOpen || _summaryOpen || _over) return;
-    if (_flagMode) {
+    final cell = _field.cells[index];
+    // Flag mode flags hidden patches; a number still chords.
+    if (_flagMode && !(cell.revealed && !cell.mine && cell.nearby > 0)) {
       _toggleFlag(index);
       return;
     }
-    final cell = _field.cells[index];
     if (cell.revealed && cell.mine) return;
     if (cell.flagged) {
-      _showFeedback('Switch to Flag to remove this marker.');
+      _showFeedback(
+        'Long-press, right-click or Flag mode removes this marker.',
+      );
       return;
     }
     if (cell.revealed && cell.nearby > 0) {
@@ -923,6 +975,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
       _startTimer();
     }
     _onboardingDug = true;
+    _lastCell = index;
     _moves++;
     if (firstDig && (_run?.cans ?? 0) > 0) _useCan();
     _afterReveal(index, before);
@@ -1002,6 +1055,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     }
     if (run != null && !_lost && _won) _stageCleared();
     if (_over) _endOnboarding();
+    // The board's end, a lost heart and their banners are drawn for the
+    // whole board: zoom back out so they are seen (feature-mobile-touch-zoom).
+    final heartLost = run != null && _run != null && run.hearts > _run!.hearts;
+    if (_over || heartLost) _resetZoom();
     setState(() {});
     _syncGameplay();
     if (run != null) {
@@ -1106,6 +1163,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     if (!_appActive || _overlayOpen || _summaryOpen) return;
     if (!_field.toggleFlag(index)) return;
     _launchBoard = false;
+    _lastCell = index;
+    // A light buzz confirms the flag on phones (no-op elsewhere).
+    unawaited(HapticFeedback.mediumImpact());
     _clearFeedback();
     if (_field.cells[index].flagged) _onboardingFlagged = true;
     _checkpointRun();
@@ -1268,6 +1328,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
               _gate(_modeButton(palette, false, height: 46)),
               const SizedBox(height: 8),
               _gate(_modeButton(palette, true, height: 46)),
+              if (_zoomable) ...[
+                const SizedBox(height: 8),
+                _gate(_zoomToggle(palette, size: 46)),
+              ],
               const SizedBox(height: 14),
               _gate(
                 DifficultyPicker(
@@ -1295,6 +1359,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
             if (flag) const SizedBox(width: 8),
             Expanded(child: _modeButton(palette, flag)),
           ],
+          if (_zoomable) ...[const SizedBox(width: 8), _zoomToggle(palette)],
         ],
       ),
     );
@@ -1511,6 +1576,20 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           580.0,
           math.min(box.maxWidth, math.max(0.0, box.maxHeight - rowHeight)),
         );
+        // Frame, its border and the bed padding around the grid.
+        final inner =
+            dimension - 2 * (GardenBoard.frameFor(dimension) + 3 + _gap);
+        final zoomable =
+            inner > 0 &&
+            boardCellSide(inner, _field.size, _gap) < zoomCellThreshold;
+        if (zoomable != _zoomable) {
+          // The zoom toggle sits outside the board: update it after layout.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || zoomable == _zoomable) return;
+            if (!zoomable) _resetZoom();
+            setState(() => _zoomable = zoomable);
+          });
+        }
         final board = GardenBoard(
           field: _field,
           palette: palette,
@@ -1521,6 +1600,10 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           dimension: dimension,
           onTap: _tapCell,
           onFlag: _toggleFlag,
+          zoom: _zoom,
+          zoomable: zoomable,
+          zoomed: _zoomed,
+          viewerKey: _zoomViewerKey,
         );
         if (run == null) return Center(child: board);
         return Center(
@@ -1652,9 +1735,15 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 _gate(
                   Row(
                     children: [
-                      _modeIcon(palette, false),
-                      const SizedBox(width: 6),
-                      _modeIcon(palette, true),
+                      // With the zoom toggle the three icons shrink a
+                      // little, so the difficulty names stay readable.
+                      _modeIcon(palette, false, size: _zoomable ? 38 : 42),
+                      SizedBox(width: _zoomable ? 4 : 6),
+                      _modeIcon(palette, true, size: _zoomable ? 38 : 42),
+                      if (_zoomable) ...[
+                        const SizedBox(width: 4),
+                        _zoomToggle(palette, size: 38),
+                      ],
                       const SizedBox(width: 8),
                       // Names only ("Hard"), so the labels stay readable
                       // beside the toggles; the size is the semantics label.
@@ -1706,7 +1795,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   /// Icon-only Dig/Flag toggle for short windows; the label stays as the
   /// tooltip and semantics label.
-  Widget _modeIcon(GardenPalette palette, bool flag) {
+  Widget _modeIcon(GardenPalette palette, bool flag, {double size = 42}) {
     return Semantics(
       key: ValueKey(flag ? 'flag-mode' : 'dig-mode'),
       selected: _flagMode == flag,
@@ -1715,9 +1804,22 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
         icon: flag ? Icons.flag_rounded : Icons.touch_app_rounded,
         tooltip: flag ? 'Flag' : 'Dig',
         selected: _flagMode == flag,
-        size: 42,
+        size: size,
         onPressed: _over ? null : () => _setFlagMode(flag),
       ),
+    );
+  }
+
+  /// Zoom in/out, shown next to Dig/Flag while the board is zoomable.
+  Widget _zoomToggle(GardenPalette palette, {double size = 40}) {
+    return GardenIconButton(
+      key: const ValueKey('zoom-toggle'),
+      palette: palette,
+      icon: _zoomed ? Icons.zoom_out_rounded : Icons.zoom_in_rounded,
+      tooltip: _zoomed ? 'Zoom out' : 'Zoom in',
+      selected: _zoomed,
+      size: size,
+      onPressed: _toggleZoom,
     );
   }
 
@@ -1928,9 +2030,22 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
           const SizedBox(width: 10),
           _gate(
             _fitColumn(_compactRight, [
-              _modeButton(palette, false, height: 42),
-              const SizedBox(height: 6),
-              _modeButton(palette, true, height: 42),
+              // A zoomable board puts Dig, Flag and the zoom toggle in one
+              // icon row, so the column does not grow.
+              if (_zoomable)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _modeIcon(palette, false, size: 36),
+                    _modeIcon(palette, true, size: 36),
+                    _zoomToggle(palette, size: 36),
+                  ],
+                )
+              else ...[
+                _modeButton(palette, false, height: 42),
+                const SizedBox(height: 6),
+                _modeButton(palette, true, height: 42),
+              ],
               const SizedBox(height: 10),
               _difficultyPicker(palette, vertical: true),
               const SizedBox(height: 10),
@@ -2068,7 +2183,6 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     return GardenRunHud(
       palette: palette,
       stage: GardenRun.stage(_stageDone ? run.stage - 1 : run.stage),
-      hearts: run.hearts,
       runSeconds: _runSeconds,
     );
   }

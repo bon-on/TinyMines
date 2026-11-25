@@ -537,20 +537,19 @@ class RunHeartsRow extends StatelessWidget {
   }
 }
 
-/// Live status of a Garden Run: stage, hearts and the run clock. A boss stage
-/// gets a highlighted tag.
+/// Live status of a Garden Run: stage and the run clock (the hearts show in
+/// the large [RunHeartsRow] above the board). A boss stage gets a
+/// highlighted tag.
 class GardenRunHud extends StatelessWidget {
   const GardenRunHud({
     super.key,
     required this.palette,
     required this.stage,
-    required this.hearts,
     required this.runSeconds,
   });
 
   final GardenPalette palette;
   final GardenStage stage;
-  final int hearts;
   final int runSeconds;
 
   @override
@@ -567,25 +566,7 @@ class GardenRunHud extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('Stage ${stage.stage}', style: text),
-          const SizedBox(width: 10),
-          Semantics(
-            label: 'Hearts: $hearts of ${GardenRun.maxHearts}',
-            child: Row(
-              key: const ValueKey('run-hearts'),
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var i = 0; i < GardenRun.maxHearts; i++)
-                  Icon(
-                    i < hearts
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    size: 30,
-                    color: palette.danger,
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 16),
           Text('Run ${formatTime(runSeconds)}', style: text),
           if (stage.boss) ...[
             const SizedBox(width: 10),

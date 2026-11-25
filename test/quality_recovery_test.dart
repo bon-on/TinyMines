@@ -147,7 +147,7 @@ void main() {
       await tester.pump();
       expect(field.armed, isFalse, reason: 'Dig does not reveal a flag');
       expect(
-        find.text('Switch to Flag to remove this marker.'),
+        find.text('Long-press, right-click or Flag mode removes this marker.'),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const ValueKey('flag-mode')));
@@ -168,7 +168,7 @@ void main() {
   );
 
   testWidgets(
-    'right click and long press flag in either mode; revealed tiles never chord in Flag',
+    'right click and long press flag in either mode; a Flag mode tap on a number chords',
     (tester) async {
       await _pump(tester);
       final field = _field(tester)..plantMinesAt([0, 2, 4, 30, 35]);
@@ -184,7 +184,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('flag-mode')));
       await tester.tap(_tiles.at(7));
       await tester.pump();
-      expect(field.cells.where((c) => c.revealed).length, revealed);
+      // feature-mobile-touch-zoom Z4: the flags match, so the number chords.
+      expect(
+        field.cells.where((c) => c.revealed).length,
+        greaterThan(revealed),
+      );
+      for (final n in [1, 6, 8, 12, 13, 14]) {
+        expect(field.cells[n].revealed, isTrue, reason: 'neighbour $n');
+      }
+      expect(field.lost, isFalse);
       await tester.longPress(_tiles.at(0));
       await tester.tap(_tiles.at(2), buttons: kSecondaryMouseButton);
       await tester.pump();

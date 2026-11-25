@@ -27,7 +27,7 @@ Finder get _tiles =>
 Finder get _picker => find.byKey(const ValueKey('tool-picker'));
 
 Finder get _fullHearts => find.descendant(
-  of: find.byKey(const ValueKey('run-hearts')),
+  of: find.byKey(const ValueKey('board-hearts')),
   matching: find.byIcon(Icons.favorite_rounded),
 );
 

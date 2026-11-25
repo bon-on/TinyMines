@@ -46,6 +46,13 @@ and a cleared field bursts into flowers. All art is drawn in code (no image asse
   looping animation) and never block input.
 - Large screens (feature-large-screen-scale): wide windows bigger than 1280x720 (fullscreen, big monitors) lay the
   side-panel layout out at 1280x720 and scale it up uniformly, up to 1.6x, so the board and panels fill the screen.
+- Touch and zoom (feature-mobile-touch-zoom): boards with cells under 32 px
+  (Hard and Expert on phones, small portal frames) pinch-zoom up to 3x, and a
+  zoom toggle next to Dig/Flag zooms to about 44 px cells around the last
+  move. Every new board starts unzoomed. Holding a tile shrinks it until the
+  long-press flag lands (with a short vibration where supported), and in Flag
+  mode a tap on a number still chords. Garden Run hearts show once, above the
+  board.
 - Every finished run opens a summary (time, best, New best!, XP, level bar,
   unlocks, new plots) with a Next goal block (next level and theme, Garden
   Run target or the closest plot). Enter plays again, Escape shows the board.
