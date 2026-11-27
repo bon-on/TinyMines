@@ -219,6 +219,41 @@ void main() {
     }
   }
 
+  for (final size in const [Size(360, 560), Size(320, 480), Size(560, 315)]) {
+    testWidgets('My Garden closes back to a Garden Run at $size', (
+      tester,
+    ) async {
+      await _pump(tester, size);
+      await _startRun(tester);
+      await tester.tap(_tiles.first);
+      await tester.pump();
+      final garden = find.byTooltip('Garden');
+      await tester.tap(
+        garden.evaluate().isNotEmpty ? garden : find.text('Garden').first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(GardenOverlay), findsOneWidget);
+      // The sheet is taller than the screen here; the bottom Close button
+      // is scrolled away but the pinned X is visible.
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(GardenOverlay),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scroll.position.maxScrollExtent, greaterThan(0));
+      final close = find.byKey(const ValueKey('garden-close'));
+      final rect = tester.getRect(close);
+      expect(rect.top, greaterThanOrEqualTo(0));
+      expect(rect.bottom, lessThanOrEqualTo(size.height));
+      await tester.tap(close);
+      await tester.pumpAndSettle();
+      expect(find.byType(GardenOverlay), findsNothing);
+      expect(find.byKey(const ValueKey('board-hearts')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final size in const [Size(620, 349), Size(560, 315), Size(320, 568)]) {
     testWidgets('Dig/Flag and the menus work at $size', (tester) async {
       await _pump(tester, size);
@@ -242,6 +277,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byType(GardenOverlay), findsOneWidget);
+      // The pinned close button is on screen without scrolling and closes
+      // the sheet, so a paused run can be resumed.
+      final close = find.byKey(const ValueKey('garden-close'));
+      final closeRect = tester.getRect(close);
+      expect(closeRect.top, greaterThanOrEqualTo(0));
+      expect(closeRect.bottom, lessThanOrEqualTo(size.height));
+      expect(closeRect.right, lessThanOrEqualTo(size.width));
+      expect(closeRect.width, greaterThanOrEqualTo(44));
+      await tester.tap(close);
+      await tester.pumpAndSettle();
+      expect(find.byType(GardenOverlay), findsNothing);
 
       // How to play, on a fresh screen.
       await tester.pumpWidget(const SizedBox.shrink());

@@ -943,72 +943,117 @@ class _GardenOverlayState extends State<GardenOverlay> {
                       palette: palette,
                       radius: 26,
                       padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'My Garden',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: palette.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            LevelCard(
-                              palette: palette,
-                              progress: widget.progress,
-                            ),
-                            const SizedBox(height: 14),
-                            PanelCaption('Themes', palette: palette),
-                            const SizedBox(height: 6),
-                            ThemePicker(
-                              palette: palette,
-                              progress: widget.progress,
-                              onSelect: widget.onSelectTheme,
-                            ),
-                            const SizedBox(height: 14),
-                            DailyCard(
-                              palette: palette,
-                              progress: widget.progress,
-                              today: widget.today,
-                              playing: widget.dailyPlaying,
-                              onPlay: widget.onPlayDaily,
-                            ),
-                            const SizedBox(height: 14),
-                            GardenPlotsCard(
-                              palette: palette,
-                              progress: widget.progress,
-                              runStage: widget.runStage,
-                            ),
-                            const SizedBox(height: 14),
-                            RecordsCard(
-                              palette: palette,
-                              progress: widget.progress,
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              child: TextButton(
-                                onPressed: widget.onClose,
-                                style: TextButton.styleFrom(
-                                  foregroundColor: palette.textSecondary,
-                                ),
-                                child: const Text(
-                                  'Close',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      // The title row stays pinned so the close button is
+                      // reachable on short phones without scrolling.
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _GardenOverlayHeader(
+                            palette: palette,
+                            onClose: widget.onClose,
+                          ),
+                          const SizedBox(height: 8),
+                          Flexible(
+                            child: SingleChildScrollView(child: _body(palette)),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(GardenPalette palette) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LevelCard(palette: palette, progress: widget.progress),
+        const SizedBox(height: 14),
+        PanelCaption('Themes', palette: palette),
+        const SizedBox(height: 6),
+        ThemePicker(
+          palette: palette,
+          progress: widget.progress,
+          onSelect: widget.onSelectTheme,
+        ),
+        const SizedBox(height: 14),
+        DailyCard(
+          palette: palette,
+          progress: widget.progress,
+          today: widget.today,
+          playing: widget.dailyPlaying,
+          onPlay: widget.onPlayDaily,
+        ),
+        const SizedBox(height: 14),
+        GardenPlotsCard(
+          palette: palette,
+          progress: widget.progress,
+          runStage: widget.runStage,
+        ),
+        const SizedBox(height: 14),
+        RecordsCard(palette: palette, progress: widget.progress),
+        const SizedBox(height: 8),
+        Align(
+          child: TextButton(
+            onPressed: widget.onClose,
+            style: TextButton.styleFrom(foregroundColor: palette.textSecondary),
+            child: const Text(
+              'Close',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GardenOverlayHeader extends StatelessWidget {
+  const _GardenOverlayHeader({required this.palette, required this.onClose});
+
+  final GardenPalette palette;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48),
+            child: Text(
+              'My Garden',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: palette.textPrimary,
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              key: const ValueKey('garden-close'),
+              tooltip: 'Close',
+              onPressed: onClose,
+              iconSize: 26,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              color: palette.textPrimary,
+              icon: const Icon(Icons.close_rounded),
             ),
           ),
         ],
