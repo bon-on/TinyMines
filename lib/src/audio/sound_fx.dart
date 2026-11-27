@@ -46,7 +46,7 @@ abstract class MusicPlayer {
   void stop();
 }
 
-/// Web: a looping HTML audio element. Native: `startLoop` / `stopLoop` on the
+/// Web: a looping Web Audio source. Native: `startLoop` / `stopLoop` on the
 /// `tiny_mines/audio` channel (native pause restarts the loop on resume).
 class PlatformMusicPlayer implements MusicPlayer {
   PlatformMusicPlayer({WebSound? web}) : _web = web ?? WebSound();
@@ -109,7 +109,7 @@ abstract class SoundPlayer {
   void dispose();
 }
 
-/// Web: HTML audio elements. Native: the `tiny_mines/audio` channel.
+/// Web: Web Audio buffer sources. Native: the `tiny_mines/audio` channel.
 /// Every failure is swallowed so audio can never block input.
 class PlatformSoundPlayer implements SoundPlayer {
   static const MethodChannel _channel = MethodChannel('tiny_mines/audio');
