@@ -36,6 +36,17 @@ class GardenTools {
     GardenTool.can => run.cans < maxCharges,
   };
 
+  /// A tool is offered after every [offerEvery]-th cleared stage (2, 4, 6…):
+  /// one after every stage made long runs too easy.
+  static const int offerEvery = 2;
+
+  /// Whether the stage just cleared (the run now has [cleared] clears)
+  /// earns a tool offer when offers come every [every] clears.
+  static bool offersAfter(int cleared, {int every = offerEvery}) {
+    assert(every > 0, 'offers need a positive cadence');
+    return every > 0 && cleared > 0 && cleared % every == 0;
+  }
+
   /// Up to [offerSize] distinct eligible tools, chosen with [random].
   static List<GardenTool> offer(GardenRunState run, Random random) {
     final pool = [

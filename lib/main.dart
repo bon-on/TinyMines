@@ -146,6 +146,7 @@ class TinyMinesScreen extends StatefulWidget {
     this.now,
     this.resultCopier = const ResultCopier(),
     this.gardenTools = true,
+    this.toolOfferEvery = GardenTools.offerEvery,
     this.toolRandom,
     this.launchIntoRun = false,
   });
@@ -156,9 +157,13 @@ class TinyMinesScreen extends StatefulWidget {
   /// Classic launch; [TinyMinesApp] turns it on.
   final bool launchIntoRun;
 
-  /// Garden Run offers a tool after each cleared stage (feature-garden-tools);
+  /// Garden Run offers a tool after every [toolOfferEvery]-th cleared stage
+  /// (feature-garden-tools);
   /// tests of the plain stage flow turn it off.
   final bool gardenTools;
+
+  /// A tool offer follows every this many cleared stages (feature-garden-tools).
+  final int toolOfferEvery;
 
   /// Draws the tool offers; tests pass a seeded generator.
   final math.Random? toolRandom;
@@ -854,7 +859,9 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _healedOnClear = _run!.hearts > before;
     if (_healedOnClear) _runHeals++;
     _stageDone = true;
-    _stageReward = widget.gardenTools
+    _stageReward =
+        widget.gardenTools &&
+            GardenTools.offersAfter(_run!.cleared, every: widget.toolOfferEvery)
         ? GardenTools.offer(_run!, widget.toolRandom ?? math.Random())
         : const [];
     _checkpointRun();

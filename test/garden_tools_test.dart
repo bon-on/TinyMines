@@ -5,6 +5,15 @@ import 'package:tiny_mines/src/game/garden_run.dart';
 import 'package:tiny_mines/src/game/garden_tools.dart';
 
 void main() {
+  test('offers come after every second cleared stage', () {
+    expect(GardenTools.offerEvery, 2);
+    expect(
+      [for (var c = 0; c <= 6; c++) GardenTools.offersAfter(c)],
+      [false, false, true, false, true, false, true],
+    );
+    expect(GardenTools.offersAfter(1, every: 1), isTrue);
+  });
+
   group('offers', () {
     test('three distinct eligible tools, never an ineligible one', () {
       for (var seed = 0; seed < 60; seed++) {

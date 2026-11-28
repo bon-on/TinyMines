@@ -50,6 +50,7 @@ Future<void> _pump(
   Size size = const Size(800, 1400),
   MemoryGardenProgressStore? store,
   bool start = true,
+  int offerEvery = 1,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -59,6 +60,9 @@ Future<void> _pump(
       home: TinyMinesScreen(
         random: math.Random(1),
         toolRandom: math.Random(toolSeed),
+        // Most tests check the picker itself, so it opens after every stage;
+        // the default cadence has its own test below.
+        toolOfferEvery: offerEvery,
         progressStore: store ?? MemoryGardenProgressStore(),
         tutorialStore: _Seen(),
         now: () => DateTime(2026, 11, 2, 9),
@@ -341,6 +345,24 @@ void main() {
     expect(_tiles, findsNWidgets(36));
   });
 
+  testWidgets('by default a tool is offered after every second stage', (
+    tester,
+  ) async {
+    await _pump(tester, toolSeed: 3, offerEvery: GardenTools.offerEvery);
+    final garden = _Garden();
+    await _clear(tester, garden.stage(1, 12), 12);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Next stage'));
+    await tester.pumpAndSettle();
+    expect(_picker, findsNothing, reason: 'no offer after stage 1');
+
+    await _clear(tester, garden.stage(2, 14), 14);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Next stage'));
+    await tester.pumpAndSettle();
+    expect(_picker, findsOneWidget, reason: 'an offer after stage 2');
+  });
+
   testWidgets('with the picker, gameplay stops and restarts around it', (
     tester,
   ) async {
@@ -354,6 +376,7 @@ void main() {
         home: TinyMinesScreen(
           random: math.Random(1),
           toolRandom: math.Random(3),
+          toolOfferEvery: 1,
           progressStore: store,
           tutorialStore: _Seen(),
           platform: platform,

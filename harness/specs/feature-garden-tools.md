@@ -22,7 +22,7 @@ no decisions between boards and no reason to start another one. The run needs a 
 layer that is the game's own.
 
 ## Scope
-After every cleared Garden Run stage the player picks one of three garden tools; the choice
+After every second cleared Garden Run stage (2, 4, 6…) the player picks one of three garden tools; the choice
 carries through the rest of that run. Tools are automatic (no new buttons), so layouts are unchanged.
 
 | Tool | Effect | Offered when |
@@ -36,14 +36,14 @@ carries through the rest of that run. Tools are automatic (no new buttons), so l
   tools fewer are shown, and with none the next stage starts at once. The picker is a modal card
   (keys 1-3, taps); the next stage starts after a pick. If the How to play or Garden card is open
   when the stage ends, the picker opens when that card closes. "Next stage" and the 1.8 s
-  auto-advance now open the picker.
+  auto-advance now open the picker when an offer is due.
 - Run-scoped tools are kept in the active run checkpoint (feature-garden-run-resume).
 - Out of scope: changes to stage table, hearts
   cap, boss rules, XP, records, the daily, Normal/Hard/Expert, board generation.
 
 ## Acceptance Criteria
 - The picker offers three distinct tools (fewer only when fewer are eligible) and never an ineligible one (no Sunflower at full
-  hearts, nothing at its cap). It opens after every cleared stage and blocks board input.
+  hearts, nothing at its cap). It opens after every second cleared stage (`GardenTools.offerEvery`, changed 2026-11-28 from every stage, which made runs too easy) and blocks board input; other clears go straight to the next stage.
 - Sunflower and Lantern apply at once; hearts never exceed 3. Clover absorbs a dug mole (also a
   chord's mole) so no heart is lost; one clover per mole. The mole is still shown as blasted and
   the stage goes on. A mole that costs the last heart still ends the run when no clover is left.
