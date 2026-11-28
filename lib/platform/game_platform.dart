@@ -5,8 +5,9 @@ import 'game_platform_factory_stub.dart'
 /// Hooks a distribution portal needs from the game loop.
 ///
 /// Mobile and plain web builds use [NoopGamePlatform]; CrazyGames web builds
-/// (`--dart-define=CRAZYGAMES=true`) use the SDK-backed implementation and
-/// GamePix builds (`--dart-define=GAMEPIX=true`) a no-op without result upload.
+/// (`--dart-define=CRAZYGAMES=true`) use the CrazyGames SDK adapter and
+/// GamePix builds (`--dart-define=GAMEPIX=true`) the GamePix SDK adapter
+/// (feature-gamepix-sdk).
 abstract class GamePlatform {
   const GamePlatform();
 
@@ -30,6 +31,18 @@ abstract class GamePlatform {
   /// mute setting). Platforms without such events ignore it.
   void setAudioMuteListener(void Function()? listener) {}
 
+  /// Registers a callback for portal pause/resume requests (GamePix Player
+  /// overlays and ads). Platforms without such events ignore it.
+  void setPauseListener(void Function(bool paused)? listener) {}
+
+  /// Whether [showRunBreakAd] may show an ad, so callers only wait for it on
+  /// such platforms (feature-gamepix-sdk).
+  bool get showsRunBreakAds => false;
+
+  /// Shows an ad between runs. Completes when the ad ends, fails or is
+  /// skipped (cooldown), so callers can always continue afterwards.
+  Future<void> showRunBreakAd() async {}
+
   /// Public game page appended to copied results (feature-next-goal-share,
   /// adr-share-link-per-flavor); null copies text only. It is only text:
   /// the game never opens it.
@@ -42,8 +55,8 @@ abstract class GamePlatform {
 const String pagesShareLink = 'https://bon-on.github.io/TinyMines/';
 
 class NoopGamePlatform extends GamePlatform {
-  /// [allowsResultRegistration] is false for portal builds without an SDK
-  /// (GamePix, `--dart-define=GAMEPIX=true`): no external network calls.
+  /// [allowsResultRegistration] is false for portal behaviour without an SDK
+  /// (tests and the GamePix adapter's fallback).
   const NoopGamePlatform({
     this.allowsResultRegistration = true,
     this.shareLink,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -19,7 +20,28 @@ class _FakeStore extends TutorialStore {
 }
 
 class _FakePlatform extends GamePlatform {
-  _FakePlatform({this.allowsResultRegistration = false});
+  _FakePlatform({
+    this.allowsResultRegistration = false,
+    this.showsRunBreakAds = false,
+  });
+
+  @override
+  final bool showsRunBreakAds;
+
+  /// Completes the ad in flight; null when no ad was requested.
+  Completer<void>? ad;
+
+  void Function(bool paused)? pauseListener;
+
+  @override
+  Future<void> showRunBreakAd() {
+    events.add('ad');
+    return (ad = Completer<void>()).future;
+  }
+
+  @override
+  void setPauseListener(void Function(bool paused)? listener) =>
+      pauseListener = listener;
 
   @override
   final bool allowsResultRegistration;
@@ -162,6 +184,49 @@ void main() {
     await tester.tap(find.text('New Field'));
     await tester.pump();
     expect(platform.events, <String>['start', 'stop', 'start']);
+  });
+
+  testWidgets('a new field from the summary waits for the break ad', (
+    tester,
+  ) async {
+    final platform = _FakePlatform(showsRunBreakAds: true);
+    await _pump(tester, platform, _FakeStore(seen: true));
+
+    await tester.tap(find.byTooltip('Restart'));
+    await tester.pump();
+    expect(platform.events, <String>['start'], reason: 'no ad mid-run');
+
+    await _lose(tester);
+    await tester.tap(find.text('New Field'));
+    await tester.pump();
+    await tester.tap(find.text('New Field'));
+    await tester.pump();
+    expect(platform.events, <String>['start', 'stop', 'ad']);
+    expect(find.text('New Field'), findsOneWidget);
+
+    platform.ad!.complete();
+    await tester.pumpAndSettle();
+    expect(platform.events, <String>['start', 'stop', 'ad', 'start']);
+    expect(find.text('New Field'), findsNothing);
+  });
+
+  testWidgets('a portal pause stops play until it resumes', (tester) async {
+    final platform = _FakePlatform();
+    await _pump(tester, platform, _FakeStore(seen: true));
+    expect(platform.pauseListener, isNotNull);
+
+    platform.pauseListener!(true);
+    await tester.pump();
+    platform.pauseListener!(true);
+    await tester.pump();
+    expect(platform.events, <String>['start', 'stop']);
+
+    platform.pauseListener!(false);
+    await tester.pump();
+    expect(platform.events, <String>['start', 'stop', 'start']);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(platform.pauseListener, isNull);
   });
 
   testWidgets('winning stops gameplay', (tester) async {

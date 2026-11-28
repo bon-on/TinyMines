@@ -216,7 +216,13 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   bool _onboardingDug = false;
   bool _onboardingFlagged = false;
   bool _gameplayActive = false;
+
+  /// Browser tab visible and focused, and no portal pause (GamePix Player
+  /// overlays and ads, feature-gamepix-sdk): both must hold to play.
   bool _appActive = true;
+  bool _lifecycleActive = true;
+  bool _portalPaused = false;
+  bool _breakAdInProgress = false;
   bool _flagMode = false;
 
   /// Board zoom (feature-mobile-touch-zoom): view only, never saved.
@@ -316,9 +322,12 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
     _sound.addListener(_onSoundChanged);
     if (widget.soundFx == null) _sound.load();
     final lifecycle = WidgetsBinding.instance.lifecycleState;
-    _appActive = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    _lifecycleActive =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    _appActive = _lifecycleActive;
     _sound.setAppVisible(_appActive);
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycleChanged);
+    widget.platform.setPauseListener(_onPortalPause);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     widget.platform.setAudioMuteListener(_sound.refreshMute);
     _sound.startMusic();
@@ -500,7 +509,20 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   }
 
   void _onLifecycleChanged(AppLifecycleState state) {
-    final active = state == AppLifecycleState.resumed;
+    _lifecycleActive = state == AppLifecycleState.resumed;
+    _applyActive();
+  }
+
+  void _onPortalPause(bool paused) {
+    if (!mounted) return;
+    _portalPaused = paused;
+    _applyActive();
+  }
+
+  /// Stops the clock and input while the tab is hidden or the portal paused
+  /// the game, and restarts the clock once both allow play again.
+  void _applyActive() {
+    final active = _lifecycleActive && !_portalPaused;
     if (_appActive == active) return;
     setState(() => _appActive = active);
     _sound.setAppVisible(active);
@@ -521,6 +543,7 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     widget.platform.setAudioMuteListener(null);
+    widget.platform.setPauseListener(null);
     _lifecycle.dispose();
     _sound.removeListener(_onSoundChanged);
     _sound.stopMusic();
@@ -1233,6 +1256,25 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
 
   void _closeSummary() => setState(() => _summaryOpen = false);
 
+  /// Wraps a run summary action that starts a new board: on platforms with
+  /// break ads (GamePix, feature-gamepix-sdk) the ad plays first. Elsewhere
+  /// the action is returned unchanged.
+  VoidCallback? _afterBreakAd(VoidCallback? action) {
+    if (action == null || !widget.platform.showsRunBreakAds) return action;
+    return () async {
+      if (_breakAdInProgress) return;
+      _breakAdInProgress = true;
+      try {
+        await widget.platform.showRunBreakAd();
+      } catch (_) {
+        // A failed ad never keeps the player from the next board.
+      } finally {
+        _breakAdInProgress = false;
+      }
+      if (mounted) action();
+    };
+  }
+
   /// The build's link for copied results (adr-share-link-per-flavor).
   String? get _shareLink {
     try {
@@ -1396,33 +1438,40 @@ class _TinyMinesScreenState extends State<TinyMinesScreen> {
                 report: report,
                 palette: palette,
                 delay: Duration(milliseconds: report.won ? 950 : 800),
-                onPlayAgain: report.garden ? _startGardenRun : _restart,
-                onPractice: report.daily && _dailyDay != null
-                    ? () => _startDailyPractice(_dailyDay!)
-                    : null,
+                onPlayAgain: _afterBreakAd(
+                  report.garden ? _startGardenRun : _restart,
+                )!,
+                onPractice: _afterBreakAd(
+                  report.daily && _dailyDay != null
+                      ? () => _startDailyPractice(_dailyDay!)
+                      : null,
+                ),
                 onClose: _closeSummary,
                 onShown: _onSummaryShown,
                 shareLink: _shareLink,
                 now: _today,
                 copier: widget.resultCopier,
-                onTryGardenRun:
-                    !report.garden &&
-                        !report.daily &&
-                        report.won &&
-                        _progressLoaded &&
-                        _progress.runsPlayed == 0
-                    ? _resumeOrStartGardenRun
-                    : null,
+                onTryGardenRun: _afterBreakAd(
+                  !report.garden &&
+                          !report.daily &&
+                          report.won &&
+                          _progressLoaded &&
+                          _progress.runsPlayed == 0
+                      ? _resumeOrStartGardenRun
+                      : null,
+                ),
                 nextLabel: report.garden ? 'Classic board' : null,
                 selectedTheme: _progress.selectedTheme,
                 onUseTheme: _selectTheme,
-                onNext: report.garden
-                    ? _restart
-                    : report.won &&
-                          !report.daily &&
-                          report.difficulty?.next != null
-                    ? _playNext
-                    : null,
+                onNext: _afterBreakAd(
+                  report.garden
+                      ? _restart
+                      : report.won &&
+                            !report.daily &&
+                            report.difficulty?.next != null
+                      ? _playNext
+                      : null,
+                ),
               ),
             ),
           if (_gardenOpen)

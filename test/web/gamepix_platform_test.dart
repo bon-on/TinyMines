@@ -5,6 +5,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tiny_mines/platform/crazygames_platform.dart';
 import 'package:tiny_mines/platform/game_platform.dart';
+import 'package:tiny_mines/platform/gamepix_platform.dart';
 import 'package:tiny_mines/platform/game_platform_factory_web.dart'
     as web_factory;
 
@@ -19,12 +20,12 @@ void main() {
     expect(platform.shareLink, pagesShareLink);
   });
 
-  test('GamePix build is a no-op without result registration', () {
+  test('GamePix build uses the SDK adapter without result registration', () {
     final platform = web_factory.selectGamePlatform(
       crazyGames: false,
       gamePix: true,
     );
-    expect(platform, isA<NoopGamePlatform>());
+    expect(platform, isA<GamePixPlatform>());
     expect(platform.allowsResultRegistration, isFalse);
     expect(platform.shareLink, isNull, reason: 'GamePix: no outbound link');
   });
